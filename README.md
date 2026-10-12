@@ -4,20 +4,17 @@ pigo is a small Go coding agent. It chats with an OpenAI-compatible model, runs 
 
 ## Design
 
-```text
-CLI session
-    |
-    v
-internal/coding          Pi pi-coding-agent
-    |  workspace tools
-    v
-internal/agent           Pi pi-agent-core
-    |  loop, transcript, tool execution
-    v
-internal/ai              Pi pi-ai
-    |  messages, tool schemas, streaming
-    v
-OpenAI-compatible HTTP
+```mermaid
+flowchart TD
+    cli["CLI session"]
+    coding["internal/coding<br/>Pi pi-coding-agent"]
+    agent["internal/agent<br/>Pi pi-agent-core"]
+    ai["internal/ai<br/>Pi pi-ai"]
+    http["OpenAI-compatible HTTP"]
+    cli --> coding
+    coding --> agent
+    agent --> ai
+    ai --> http
 ```
 
 | Pi package | pigo package | Owns |
@@ -26,13 +23,29 @@ OpenAI-compatible HTTP
 | `pi-agent-core` | `internal/agent` | Agent state, the ask/act loop, tool execution |
 | `pi-coding-agent` | `internal/coding` and `internal/cli` | Workspace, coding tools, terminal session |
 
-`internal/ai` describes tools. It does not run them. `internal/agent` runs tools and writes results back into the transcript. `internal/coding` supplies the file and shell tools and keeps paths inside one directory.
+`internal/ai` describes tools and streams model output. `internal/agent` runs tools and writes results back into the transcript. `internal/coding` supplies the file and shell tools and keeps paths inside one directory.
 
-A transcript message is a user message, an assistant message, or a tool result. Assistant text and tool calls are blocks on the assistant message. The HTTP client turns tool results into OpenAI `role: "tool"` messages. That conversion is the only place the wire format appears.
+A transcript message is a user message, an assistant message, or a tool result. Assistant text and tool calls sit directly on the assistant message. The HTTP client turns tool results into OpenAI `role: "tool"` messages. That conversion is the only place the wire format appears.
 
 ### A turn
 
 `Agent.Prompt` is the whole loop:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent
+    participant Model
+    participant Tools
+    User->>Agent: prompt
+    loop until the model stops
+        Agent->>Model: system prompt, transcript, tool schemas
+        Model-->>Agent: assistant message
+        Agent->>Tools: tool calls
+        Tools-->>Agent: tool results
+    end
+    Agent-->>User: final text
+```
 
 1. Append the user message.
 2. Call the model with the system prompt, the transcript, and the tool schemas.
@@ -40,7 +53,7 @@ A transcript message is a user message, an assistant message, or a tool result. 
 4. When the assistant requested tool calls, run them one at a time. Each call is paired with a tool-result message, including failures and cancellation.
 5. Go back to step 2 until the assistant stops, the run is canceled, or the turn limit is hit.
 
-The system prompt and tool list are added when a request is built. They are not copied into the stored transcript. `Reset` clears the transcript and leaves the prompt, model, and tools in place.
+The system prompt follows Pi's coding-agent sections: a short preamble, the tool list, the rules, and the working directory. It is added when a request is built and is kept out of the stored transcript. `Reset` clears the transcript and leaves the prompt, model, and tools in place.
 
 ### Workspace
 
@@ -68,6 +81,10 @@ make build
 ./pigo
 ```
 
+A terminal opens a chat screen. Type a task, press enter, and watch the reply stream. Tool calls print on their own lines. `/reset` clears the transcript, `/exit` quits, and Ctrl-C cancels the task in progress. Page Up and Page Down scroll the transcript.
+
+When stdin is not a terminal, the same commands work as a line session. That is what pipes and tests use.
+
 One task, then exit:
 
 ```bash
@@ -94,12 +111,9 @@ go run . -p "List the files here"
 
 Flags `-base-url`, `-model`, and `-w` override the environment. The API key stays in the environment so it does not land in shell history. A `.env` file in the current directory fills in variables that are not already set.
 
-Inside the session, `/exit` quits and `/reset` clears the transcript. Ctrl-C cancels the task in progress. A one-shot run exits with an error when it is interrupted.
-
-A session looks like this:
+A one-shot run prints the same stream the chat shows:
 
 ```text
-you> Create hello.txt that says hi
 → write_file {"path":"hello.txt","content":"hi"}
 ← wrote hello.txt (2 bytes)
 Created hello.txt.
@@ -107,4 +121,4 @@ Created hello.txt.
 
 ## Out of scope
 
-Full-screen TUI, native APIs for every model vendor, a skills catalog, session files on disk, sub-agents, and telemetry. The turn limit is 25 model calls.
+A full Pi TUI, native APIs for every model vendor, a skills catalog, session files on disk, sub-agents, and telemetry. The turn limit is 25 model calls.
