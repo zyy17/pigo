@@ -1,0 +1,253 @@
+package agent_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/zyy17/pigo/internal/agent"
+	"github.com/zyy17/pigo/internal/ai"
+)
+
+func TestLoopRunsToolThenStops(t *testing.T) {
+	script := &fakeModel{msgs: []ai.Message{
+		ai.Assistant("", ai.StopToolUse, call("call_1", "echo", map[string]any{"text": "hi"})),
+		ai.Assistant("all done", ai.StopStop),
+	}}
+	ag := newAgent(t, script, echoTool())
+	var labels []string
+	ag.Subscribe(func(ev agent.Event) {
+		labels = append(labels, label(ev))
+	})
+
+	if err := ag.Prompt(context.Background(), "say hi"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := strings.Join([]string{
+		"agent_start",
+		"message_start:user",
+		"message_end:user",
+		"turn_start",
+		"message_start:assistant",
+		"message_end:assistant",
+		"tool_execution_start",
+		"tool_execution_end",
+		"message_start:toolResult",
+		"message_end:toolResult",
+		"turn_end",
+		"turn_start",
+		"message_start:assistant",
+		"message_update",
+		"message_end:assistant",
+		"turn_end",
+		"agent_end",
+	}, "\n")
+	if strings.Join(labels, "\n") != want {
+		t.Fatalf("events:\n%s", strings.Join(labels, "\n"))
+	}
+
+	if len(script.reqs) != 2 {
+		t.Fatalf("model calls: %d", len(script.reqs))
+	}
+	if roles(script.reqs[0].Messages) != "system,user" {
+		t.Fatalf("first request %s", roles(script.reqs[0].Messages))
+	}
+	if roles(script.reqs[1].Messages) != "system,user,assistant,toolResult" {
+		t.Fatalf("second request %s", roles(script.reqs[1].Messages))
+	}
+	if script.reqs[0].Tools[0].Name != "echo" {
+		t.Fatal("tool schema was not sent")
+	}
+	last := ag.Messages()
+	if last[len(last)-1].Text() != "all done" {
+		t.Fatalf("transcript ended with %q", last[len(last)-1].Text())
+	}
+}
+
+func TestInvalidToolJSON(t *testing.T) {
+	var ran bool
+	tool := echoTool()
+	tool.Execute = func(ctx context.Context, args []byte) (string, error) {
+		ran = true
+		return "ran", nil
+	}
+	script := &fakeModel{msgs: []ai.Message{
+		ai.Assistant("", ai.StopToolUse, ai.ToolCall{ID: "c1", Name: "echo", Arguments: []byte("{")}),
+		ai.Assistant("recovered", ai.StopStop),
+	}}
+	ag := newAgent(t, script, tool)
+	if err := ag.Prompt(context.Background(), "go"); err != nil {
+		t.Fatal(err)
+	}
+	if ran {
+		t.Fatal("execute ran on invalid JSON")
+	}
+	result := script.reqs[1].Messages[3]
+	if result.Role != ai.RoleToolResult || !result.IsError || !strings.Contains(result.Text(), "invalid") {
+		t.Fatalf("tool result %#v", result)
+	}
+}
+
+func TestUnknownToolAndToolError(t *testing.T) {
+	tool := echoTool()
+	tool.Execute = func(ctx context.Context, args []byte) (string, error) {
+		return "", errors.New("disk full")
+	}
+	script := &fakeModel{msgs: []ai.Message{
+		ai.Assistant("", ai.StopToolUse, call("c1", "missing", map[string]any{})),
+		ai.Assistant("", ai.StopToolUse, call("c2", "echo", map[string]any{})),
+		ai.Assistant("stopped", ai.StopStop),
+	}}
+	ag := newAgent(t, script, tool)
+	if err := ag.Prompt(context.Background(), "go"); err != nil {
+		t.Fatal(err)
+	}
+	msgs := ag.Messages()
+	if !msgs[2].IsError || !strings.Contains(msgs[2].Text(), "unknown tool") {
+		t.Fatalf("unknown tool result %#v", msgs[2])
+	}
+	if !msgs[4].IsError || !strings.Contains(msgs[4].Text(), "disk full") {
+		t.Fatalf("tool error %#v", msgs[4])
+	}
+}
+
+func TestMaxTurns(t *testing.T) {
+	callMsg := ai.Assistant("", ai.StopToolUse, call("c", "echo", map[string]any{}))
+	script := &fakeModel{msgs: []ai.Message{callMsg, callMsg, callMsg}}
+	ag, err := agent.New(agent.Config{
+		Model:    "fake",
+		MaxTurns: 2,
+		Stream:   script.stream,
+		Tools:    []agent.Tool{echoTool()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ag.Prompt(context.Background(), "loop")
+	if err == nil || !strings.Contains(err.Error(), "2") {
+		t.Fatal(err)
+	}
+}
+
+func TestAbortPairsRemainingCalls(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var ran int
+	tool := echoTool()
+	tool.Execute = func(ctx context.Context, args []byte) (string, error) {
+		ran++
+		cancel()
+		return "", context.Canceled
+	}
+	script := &fakeModel{msgs: []ai.Message{
+		ai.Assistant("", ai.StopToolUse,
+			call("c1", "echo", map[string]any{}),
+			call("c2", "echo", map[string]any{}),
+		),
+		ai.Assistant("should not run", ai.StopStop),
+	}}
+	ag := newAgent(t, script, tool)
+	err := ag.Prompt(ctx, "stop halfway")
+	if !errors.Is(err, agent.ErrInterrupted) {
+		t.Fatal(err)
+	}
+	if ran != 1 {
+		t.Fatalf("execute ran %d times", ran)
+	}
+	if len(script.reqs) != 1 {
+		t.Fatalf("model calls after abort: %d", len(script.reqs))
+	}
+	var results int
+	for _, msg := range ag.Messages() {
+		if msg.Role == ai.RoleToolResult {
+			results++
+			if msg.Text() != "aborted" || !msg.IsError {
+				t.Fatalf("result %#v", msg)
+			}
+		}
+	}
+	if results != 2 {
+		t.Fatalf("paired results: %d", results)
+	}
+}
+
+func newAgent(t *testing.T, script *fakeModel, tool agent.Tool) *agent.Agent {
+	t.Helper()
+	ag, err := agent.New(agent.Config{
+		SystemPrompt: "be helpful",
+		Model:        "fake",
+		Tools:        []agent.Tool{tool},
+		Stream:       script.stream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ag
+}
+
+func echoTool() agent.Tool {
+	return agent.Tool{
+		Name:        "echo",
+		Description: "Echo the arguments",
+		Parameters:  ai.ObjectSchema(map[string]ai.Property{"text": ai.StringProp("text")}),
+		Execute: func(ctx context.Context, args []byte) (string, error) {
+			return "ok:" + string(args), nil
+		},
+	}
+}
+
+func call(id, name string, args any) ai.ToolCall {
+	b, err := json.Marshal(args)
+	if err != nil {
+		panic(err)
+	}
+	return ai.ToolCall{ID: id, Name: name, Arguments: b}
+}
+
+func label(ev agent.Event) string {
+	switch ev.Type {
+	case agent.MessageStart, agent.MessageEnd:
+		return string(ev.Type) + ":" + string(ev.Message.Role)
+	default:
+		return string(ev.Type)
+	}
+}
+
+func roles(msgs []ai.Message) string {
+	parts := make([]string, len(msgs))
+	for i, msg := range msgs {
+		parts[i] = string(msg.Role)
+	}
+	return strings.Join(parts, ",")
+}
+
+type fakeModel struct {
+	mu   sync.Mutex
+	msgs []ai.Message
+	i    int
+	reqs []ai.Request
+}
+
+func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reqs = append(f.reqs, req)
+	if f.i >= len(f.msgs) {
+		return nil, fmt.Errorf("unexpected model call %d", f.i+1)
+	}
+	msg := f.msgs[f.i]
+	f.i++
+	ch := make(chan ai.Event, 2)
+	go func() {
+		defer close(ch)
+		if text := msg.Text(); text != "" {
+			ch <- ai.Event{Type: ai.EventTextDelta, Text: text}
+		}
+		ch <- ai.Event{Type: ai.EventDone, Message: msg}
+	}()
+	return ch, nil
+}
