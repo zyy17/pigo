@@ -34,7 +34,7 @@ type Session struct {
 
 // New opens the workspace and builds the agent.
 func New(cfg Config) (*Session, error) {
-	cfg = cfg.withDefaults()
+	cfg = cfg.applyDefaults()
 	ws, err := Open(cfg.Workspace)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func New(cfg Config) (*Session, error) {
 		return nil, err
 	}
 	ag, err := agent.New(agent.Config{
-		SystemPrompt: systemPrompt(ws.Root()),
+		SystemPrompt: buildSystemPrompt(ws.Root()),
 		Model:        cfg.Model,
 		Tools:        Tools(ws),
 		Stream:       stream,
@@ -56,7 +56,7 @@ func New(cfg Config) (*Session, error) {
 	return &Session{agent: ag, root: ws.Root(), model: cfg.Model}, nil
 }
 
-func (c Config) withDefaults() Config {
+func (c Config) applyDefaults() Config {
 	if strings.TrimSpace(c.BaseURL) == "" {
 		c.BaseURL = defaultBaseURL
 	}
