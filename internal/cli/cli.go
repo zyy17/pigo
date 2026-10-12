@@ -12,6 +12,8 @@ import (
 	"os/signal"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
 )
@@ -34,23 +36,34 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	}
 	session, err := coding.New(coding.Config{
 		APIKey:    os.Getenv("PIGO_API_KEY"),
-		BaseURL:   first(opts.baseURL, os.Getenv("PIGO_BASE_URL")),
-		Model:     first(opts.model, os.Getenv("PIGO_MODEL")),
-		Workspace: first(opts.workspace, "."),
+		BaseURL:   firstNonEmpty(opts.baseURL, os.Getenv("PIGO_BASE_URL")),
+		Model:     firstNonEmpty(opts.model, os.Getenv("PIGO_MODEL")),
+		Workspace: firstNonEmpty(opts.workspace, "."),
 	})
 	if err != nil {
 		return err
 	}
-	session.Subscribe(func(ev agent.Event) { render(out, ev) })
-
 	app := &app{session: session, in: in, out: out}
-	stop := app.watchSignals()
-	defer stop()
-
 	if opts.prompt != "" {
+		session.Subscribe(func(ev agent.Event) { render(out, ev) })
+		stop := app.watchSignals()
+		defer stop()
 		return app.prompt(opts.prompt)
 	}
+	if interactiveTerminal(in, out) {
+		return runTUI(session)
+	}
+	session.Subscribe(func(ev agent.Event) { render(out, ev) })
 	return app.repl()
+}
+
+func interactiveTerminal(in io.Reader, out io.Writer) bool {
+	inFile, inOK := in.(*os.File)
+	outFile, outOK := out.(*os.File)
+	if !inOK || !outOK {
+		return false
+	}
+	return term.IsTerminal(int(inFile.Fd())) && term.IsTerminal(int(outFile.Fd()))
 }
 
 type options struct {
@@ -89,7 +102,7 @@ func writeUsage(out io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintf(out, `pigo is a small coding agent.
 
 Usage:
-  pigo              interactive session in the current directory
+  pigo              chat in the current directory
   pigo -p "task"    run one task and exit
   pigo -w DIR       use DIR as the workspace
 
@@ -166,7 +179,7 @@ func (a *app) prompt(text string) error {
 	return a.session.Prompt(ctx, text)
 }
 
-func first(values ...string) string {
+func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
 			return v
