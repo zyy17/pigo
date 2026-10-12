@@ -56,17 +56,17 @@ func (w *Workspace) Resolve(path string) (string, error) {
 	}
 	abs = filepath.Clean(abs)
 
-	real, err := nearestReal(abs)
+	real, err := nearestExisting(abs)
 	if err != nil {
 		return "", err
 	}
-	if !w.contains(real) {
+	if !w.withinRoot(real) {
 		return "", fmt.Errorf("%q is outside the workspace", path)
 	}
 	return real, nil
 }
 
-func (w *Workspace) contains(path string) bool {
+func (w *Workspace) withinRoot(path string) bool {
 	rel, err := filepath.Rel(w.root, path)
 	if err != nil {
 		return false
@@ -77,10 +77,10 @@ func (w *Workspace) contains(path string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// nearestReal resolves symlinks without requiring the final element to exist.
+// nearestExisting resolves symlinks without requiring the final element to exist.
 // Missing parents are walked until an existing directory is found, then the
 // missing suffix is joined back on.
-func nearestReal(path string) (string, error) {
+func nearestExisting(path string) (string, error) {
 	if _, err := os.Lstat(path); err == nil {
 		return filepath.EvalSymlinks(path)
 	} else if !os.IsNotExist(err) {
@@ -91,7 +91,7 @@ func nearestReal(path string) (string, error) {
 	if parent == path {
 		return path, nil
 	}
-	realParent, err := nearestReal(parent)
+	realParent, err := nearestExisting(parent)
 	if err != nil {
 		return "", err
 	}

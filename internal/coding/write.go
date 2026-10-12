@@ -10,20 +10,22 @@ import (
 	"github.com/zyy17/pigo/internal/ai"
 )
 
+type writeArgs struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 func writeTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
 		Name:        "write_file",
-		Label:       "Write file",
-		Description: "Create or overwrite a file in the workspace. path is relative to the workspace root. Parent directories are created.",
+		Label:       "write_file",
+		Description: "Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
-			"path":    ai.StringProp("File path relative to the workspace"),
-			"content": ai.StringProp("Full new contents of the file"),
+			"path":    ai.StringProperty("Path to the file to write (relative or absolute)"),
+			"content": ai.StringProperty("Content to write to the file"),
 		}, "path", "content"),
 		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args struct {
-				Path    string `json:"path"`
-				Content string `json:"content"`
-			}
+			var args writeArgs
 			if err := decodeArgs(raw, &args); err != nil {
 				return "", err
 			}
@@ -36,7 +38,7 @@ func writeFile(ctx context.Context, ws *Workspace, path, content string) (string
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := needPath(path); err != nil {
+	if err := requirePath(path); err != nil {
 		return "", err
 	}
 	abs, err := ws.Resolve(path)

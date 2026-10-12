@@ -64,8 +64,8 @@ func TestLoopRunsToolThenStops(t *testing.T) {
 		t.Fatal("tool schema was not sent")
 	}
 	last := ag.Messages()
-	if last[len(last)-1].Text() != "all done" {
-		t.Fatalf("transcript ended with %q", last[len(last)-1].Text())
+	if last[len(last)-1].Text != "all done" {
+		t.Fatalf("transcript ended with %q", last[len(last)-1].Text)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestInvalidToolJSON(t *testing.T) {
 		t.Fatal("execute ran on invalid JSON")
 	}
 	result := script.reqs[1].Messages[3]
-	if result.Role != ai.RoleToolResult || !result.IsError || !strings.Contains(result.Text(), "invalid") {
+	if result.Role != ai.RoleToolResult || !result.IsError || !strings.Contains(result.Text, "invalid") {
 		t.Fatalf("tool result %#v", result)
 	}
 }
@@ -108,10 +108,10 @@ func TestUnknownToolAndToolError(t *testing.T) {
 		t.Fatal(err)
 	}
 	msgs := ag.Messages()
-	if !msgs[2].IsError || !strings.Contains(msgs[2].Text(), "unknown tool") {
+	if !msgs[2].IsError || !strings.Contains(msgs[2].Text, "unknown tool") {
 		t.Fatalf("unknown tool result %#v", msgs[2])
 	}
-	if !msgs[4].IsError || !strings.Contains(msgs[4].Text(), "disk full") {
+	if !msgs[4].IsError || !strings.Contains(msgs[4].Text, "disk full") {
 		t.Fatalf("tool error %#v", msgs[4])
 	}
 }
@@ -165,7 +165,7 @@ func TestAbortPairsRemainingCalls(t *testing.T) {
 	for _, msg := range ag.Messages() {
 		if msg.Role == ai.RoleToolResult {
 			results++
-			if msg.Text() != "aborted" || !msg.IsError {
+			if msg.Text != "aborted" || !msg.IsError {
 				t.Fatalf("result %#v", msg)
 			}
 		}
@@ -193,7 +193,7 @@ func echoTool() agent.Tool {
 	return agent.Tool{
 		Name:        "echo",
 		Description: "Echo the arguments",
-		Parameters:  ai.ObjectSchema(map[string]ai.Property{"text": ai.StringProp("text")}),
+		Parameters:  ai.ObjectSchema(map[string]ai.Property{"text": ai.StringProperty("text")}),
 		Execute: func(ctx context.Context, args []byte) (string, error) {
 			return "ok:" + string(args), nil
 		},
@@ -244,7 +244,7 @@ func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event
 	ch := make(chan ai.Event, 2)
 	go func() {
 		defer close(ch)
-		if text := msg.Text(); text != "" {
+		if text := msg.Text; text != "" {
 			ch <- ai.Event{Type: ai.EventTextDelta, Text: text}
 		}
 		ch <- ai.Event{Type: ai.EventDone, Message: msg}

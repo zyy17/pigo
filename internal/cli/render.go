@@ -16,21 +16,21 @@ func render(w io.Writer, ev agent.Event) {
 	case agent.MessageUpdate:
 		fmt.Fprint(w, ev.TextDelta)
 	case agent.MessageEnd:
-		if ev.Message.Role == ai.RoleAssistant && ev.Message.Text() != "" && !strings.HasSuffix(ev.Message.Text(), "\n") {
+		if ev.Message.Role == ai.RoleAssistant && ev.Message.Text != "" && !strings.HasSuffix(ev.Message.Text, "\n") {
 			fmt.Fprintln(w)
 		}
 	case agent.ToolStart:
-		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, oneLine(string(ev.Args), 160))
+		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, flattenLine(string(ev.Args), 160))
 	case agent.ToolEnd:
 		mark := "←"
 		if ev.IsError {
 			mark = "✗"
 		}
-		fmt.Fprintf(w, "%s %s\n", mark, oneLine(ev.Result, 240))
+		fmt.Fprintf(w, "%s %s\n", mark, flattenLine(ev.Result, 240))
 	}
 }
 
-func oneLine(s string, max int) string {
+func flattenLine(s string, max int) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
 	r := []rune(s)
 	if len(r) <= max {

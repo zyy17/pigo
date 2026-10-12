@@ -22,13 +22,13 @@ type Tool struct {
 	Parameters  Schema
 }
 
-// StringProp describes a string parameter.
-func StringProp(description string) Property {
+// StringProperty describes a string parameter.
+func StringProperty(description string) Property {
 	return Property{Type: "string", Description: description}
 }
 
-// BoolProp describes a boolean parameter.
-func BoolProp(description string) Property {
+// BoolProperty describes a boolean parameter.
+func BoolProperty(description string) Property {
 	return Property{Type: "boolean", Description: description}
 }
 

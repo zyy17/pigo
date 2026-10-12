@@ -16,10 +16,10 @@ func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		if err := ctx.Err(); err != nil {
-			sendErr(out, err, acc.message())
+			sendStreamError(out, err, acc.message())
 			return
 		}
-		data, ok := sseData(sc.Text())
+		data, ok := dataField(sc.Text())
 		if !ok {
 			continue
 		}
@@ -28,22 +28,22 @@ func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 			return
 		}
 		if err := acc.consume(data, out); err != nil {
-			sendErr(out, err, acc.message())
+			sendStreamError(out, err, acc.message())
 			return
 		}
 	}
 	if err := sc.Err(); err != nil {
-		sendErr(out, err, acc.message())
+		sendStreamError(out, err, acc.message())
 		return
 	}
 	if acc.done {
 		out <- Event{Type: EventDone, Message: acc.message()}
 		return
 	}
-	sendErr(out, errors.New("stream ended before the model finished"), acc.message())
+	sendStreamError(out, errors.New("stream ended before the model finished"), acc.message())
 }
 
-func sseData(line string) (string, bool) {
+func dataField(line string) (string, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, ":") || !strings.HasPrefix(line, "data:") {
 		return "", false
@@ -51,6 +51,6 @@ func sseData(line string) (string, bool) {
 	return strings.TrimSpace(strings.TrimPrefix(line, "data:")), true
 }
 
-func sendErr(out chan<- Event, err error, partial Message) {
+func sendStreamError(out chan<- Event, err error, partial Message) {
 	out <- Event{Type: EventError, Err: err, Message: partial}
 }

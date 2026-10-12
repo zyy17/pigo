@@ -61,8 +61,8 @@ func TestSessionEditsAFile(t *testing.T) {
 	if got := roleList(req.Messages); got != "system,user" {
 		t.Fatalf("after reset the model saw %s", got)
 	}
-	if req.Messages[1].Text() != "again" {
-		t.Fatalf("prompt %q", req.Messages[1].Text())
+	if req.Messages[1].Text != "again" {
+		t.Fatalf("prompt %q", req.Messages[1].Text)
 	}
 }
 
@@ -115,7 +115,7 @@ func (s *scripted) stream(ctx context.Context, req ai.Request) (<-chan ai.Event,
 	ch := make(chan ai.Event, 2)
 	go func() {
 		defer close(ch)
-		if text := msg.Text(); text != "" {
+		if text := msg.Text; text != "" {
 			ch <- ai.Event{Type: ai.EventTextDelta, Text: text}
 		}
 		ch <- ai.Event{Type: ai.EventDone, Message: msg}

@@ -16,13 +16,13 @@ func decodeArgs(raw []byte, dest any) error {
 	return nil
 }
 
-func needPath(path string) error {
+func requirePath(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("path is required")
 	}
 	return nil
 }
 
-func notFound(path string) error {
+func missingPath(path string) error {
 	return fmt.Errorf("file not found: %s", path)
 }

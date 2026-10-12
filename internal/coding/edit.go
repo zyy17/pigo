@@ -11,25 +11,27 @@ import (
 	"github.com/zyy17/pigo/internal/ai"
 )
 
+type editArgs struct {
+	Path       string `json:"path"`
+	OldString  string `json:"old_string"`
+	NewString  string `json:"new_string"`
+	ReplaceAll bool   `json:"replace_all"`
+}
+
 func editTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
 		Name:  "edit_file",
-		Label: "Edit file",
-		Description: "Replace old_string with new_string in a workspace file. " +
+		Label: "edit_file",
+		Description: "Make precise edits by replacing old_string with new_string. " +
 			"old_string must match exactly once unless replace_all is true.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
-			"path":        ai.StringProp("File path relative to the workspace"),
-			"old_string":  ai.StringProp("Exact text to replace"),
-			"new_string":  ai.StringProp("Replacement text"),
-			"replace_all": ai.BoolProp("Replace every match. Default false"),
+			"path":        ai.StringProperty("Path to the file to edit (relative or absolute)"),
+			"old_string":  ai.StringProperty("Exact text to replace. Keep it small and unique"),
+			"new_string":  ai.StringProperty("Replacement text"),
+			"replace_all": ai.BoolProperty("Replace every match. Default false"),
 		}, "path", "old_string", "new_string"),
 		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args struct {
-				Path       string `json:"path"`
-				OldString  string `json:"old_string"`
-				NewString  string `json:"new_string"`
-				ReplaceAll bool   `json:"replace_all"`
-			}
+			var args editArgs
 			if err := decodeArgs(raw, &args); err != nil {
 				return "", err
 			}
@@ -42,7 +44,7 @@ func editFile(ctx context.Context, ws *Workspace, path, old, new string, replace
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := needPath(path); err != nil {
+	if err := requirePath(path); err != nil {
 		return "", err
 	}
 	if old == "" {
@@ -58,7 +60,7 @@ func editFile(ctx context.Context, ws *Workspace, path, old, new string, replace
 	info, err := os.Stat(abs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", notFound(path)
+			return "", missingPath(path)
 		}
 		return "", err
 	}

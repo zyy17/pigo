@@ -1,31 +1,9 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
-
-// streamChunk is one Server-Sent Event payload from chat completions.
-type streamChunk struct {
-	Choices []struct {
-		Delta struct {
-			Content   string `json:"content"`
-			ToolCalls []struct {
-				Index    int    `json:"index"`
-				ID       string `json:"id"`
-				Function struct {
-					Name      string `json:"name"`
-					Arguments string `json:"arguments"`
-				} `json:"function"`
-			} `json:"tool_calls"`
-		} `json:"delta"`
-		FinishReason *string `json:"finish_reason"`
-	} `json:"choices"`
-	Error *struct {
-		Message string `json:"message"`
-	} `json:"error"`
-}
 
 type callBuf struct {
 	id   string
@@ -43,49 +21,45 @@ type accumulator struct {
 }
 
 func (a *accumulator) consume(data string, out chan<- Event) error {
-	var chunk streamChunk
-	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+	chunk, err := parseChunk(data)
+	if err != nil {
 		return fmt.Errorf("bad stream chunk: %w", err)
 	}
-	if chunk.Error != nil && chunk.Error.Message != "" {
-		return fmt.Errorf("%s", chunk.Error.Message)
+	if chunk.ErrorMessage != "" {
+		return fmt.Errorf("%s", chunk.ErrorMessage)
 	}
-	if len(chunk.Choices) == 0 {
-		return nil
+	if chunk.Content != "" {
+		a.text.WriteString(chunk.Content)
+		out <- Event{Type: EventTextDelta, Text: chunk.Content}
 	}
-	choice := chunk.Choices[0]
-	if choice.Delta.Content != "" {
-		a.text.WriteString(choice.Delta.Content)
-		out <- Event{Type: EventTextDelta, Text: choice.Delta.Content}
+	for _, call := range chunk.Calls {
+		a.absorb(call)
 	}
-	for _, call := range choice.Delta.ToolCalls {
-		a.absorb(call.Index, call.ID, call.Function.Name, call.Function.Arguments)
-	}
-	if choice.FinishReason != nil && *choice.FinishReason != "" {
-		a.finish = *choice.FinishReason
+	if chunk.FinishReason != "" {
+		a.finish = chunk.FinishReason
 		a.done = true
 	}
 	return nil
 }
 
-func (a *accumulator) absorb(index int, id, name, args string) {
+func (a *accumulator) absorb(call chunkCall) {
 	if a.index == nil {
 		a.index = map[int]int{}
 	}
-	pos, ok := a.index[index]
+	pos, ok := a.index[call.Index]
 	if !ok {
 		a.calls = append(a.calls, callBuf{})
 		pos = len(a.calls) - 1
-		a.index[index] = pos
+		a.index[call.Index] = pos
 	}
-	call := &a.calls[pos]
-	if id != "" {
-		call.id = id
+	dst := &a.calls[pos]
+	if call.ID != "" {
+		dst.id = call.ID
 	}
-	if name != "" {
-		call.name = name
+	if call.Name != "" {
+		dst.name = call.Name
 	}
-	call.args.WriteString(args)
+	dst.args.WriteString(call.Arguments)
 }
 
 func (a *accumulator) message() Message {
@@ -105,10 +79,10 @@ func (a *accumulator) message() Message {
 			Arguments: []byte(args),
 		})
 	}
-	return Assistant(a.text.String(), mapStop(a.finish, len(calls)), calls...)
+	return Assistant(a.text.String(), finishReason(a.finish, len(calls)), calls...)
 }
 
-func mapStop(finish string, calls int) StopReason {
+func finishReason(finish string, calls int) StopReason {
 	switch finish {
 	case "length":
 		return StopLength

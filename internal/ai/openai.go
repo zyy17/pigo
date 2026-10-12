@@ -38,7 +38,7 @@ func (c *Client) Stream(ctx context.Context, req Request) (<-chan Event, error) 
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("User-Agent", "pigo")
 
-	resp, err := c.http().Do(httpReq)
+	resp, err := c.httpClient().Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (c *Client) endpoint() string {
 	return base + "/chat/completions"
 }
 
-func (c *Client) http() *http.Client {
+func (c *Client) httpClient() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}

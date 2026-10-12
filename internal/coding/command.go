@@ -17,19 +17,21 @@ import (
 // commandTimeout bounds run_command. Tests may shorten it.
 var commandTimeout = 30 * time.Second
 
+type commandArgs struct {
+	Command string `json:"command"`
+}
+
 func commandTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
 		Name:  "run_command",
-		Label: "Run command",
-		Description: "Run a shell command with the workspace as the working directory. " +
-			"The timeout is 30 seconds. Output is truncated.",
+		Label: "run_command",
+		Description: "Execute a bash command in the current working directory. " +
+			"Returns stdout and stderr. Output is truncated. The timeout is 30 seconds.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
-			"command": ai.StringProp("Shell command to run"),
+			"command": ai.StringProperty("Shell command to execute"),
 		}, "command"),
 		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args struct {
-				Command string `json:"command"`
-			}
+			var args commandArgs
 			if err := decodeArgs(raw, &args); err != nil {
 				return "", err
 			}
@@ -47,9 +49,9 @@ func runCommand(ctx context.Context, ws *Workspace, command string) (string, err
 	ctx, cancel := context.WithTimeout(parent, commandTimeout)
 	defer cancel()
 
-	cmd := shellCommand(ctx, command)
+	cmd := newShellCommand(ctx, command)
 	cmd.Dir = ws.Root()
-	cmd.Env = commandEnv(ws.Root())
+	cmd.Env = shellEnv(ws.Root())
 	out, err := cmd.CombinedOutput()
 	text := clipText(string(out), 8_000)
 
@@ -71,7 +73,7 @@ func runCommand(ctx context.Context, ws *Workspace, command string) (string, err
 	return text, nil
 }
 
-func shellCommand(ctx context.Context, command string) *exec.Cmd {
+func newShellCommand(ctx context.Context, command string) *exec.Cmd {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
@@ -84,8 +86,8 @@ func shellCommand(ctx context.Context, command string) *exec.Cmd {
 	return cmd
 }
 
-// commandEnv hides the API key and points PWD at the workspace.
-func commandEnv(root string) []string {
+// shellEnv hides the API key and points PWD at the workspace.
+func shellEnv(root string) []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env)+1)
 	for _, kv := range env {

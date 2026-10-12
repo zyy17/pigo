@@ -57,7 +57,7 @@ func TestStreamText(t *testing.T) {
 	if text != "Hello there" {
 		t.Fatalf("deltas %q", text)
 	}
-	if done.Text() != "Hello there" || done.StopReason != ai.StopStop {
+	if done.Text != "Hello there" || done.StopReason != ai.StopStop {
 		t.Fatalf("done %#v", done)
 	}
 }
@@ -115,7 +115,7 @@ func TestStreamToolCalls(t *testing.T) {
 			done = ev.Message
 		}
 	}
-	calls := done.ToolCalls()
+	calls := done.ToolCalls
 	if done.StopReason != ai.StopToolUse || len(calls) != 2 {
 		t.Fatalf("message %#v", done)
 	}
@@ -160,7 +160,7 @@ func TestRequestShape(t *testing.T) {
 		Tools: []ai.Tool{{
 			Name:        "read_file",
 			Description: "Read a file",
-			Parameters:  ai.ObjectSchema(map[string]ai.Property{"path": ai.StringProp("path")}, "path"),
+			Parameters:  ai.ObjectSchema(map[string]ai.Property{"path": ai.StringProperty("path")}, "path"),
 		}},
 	})
 	for _, ev := range evs {

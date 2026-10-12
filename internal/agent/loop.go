@@ -48,7 +48,7 @@ func (a *Agent) run(ctx context.Context) error {
 		}
 		a.emit(Event{Type: TurnStart, Turn: turn})
 
-		msg, err := a.complete(ctx)
+		msg, err := a.readAssistant(ctx)
 		if err != nil {
 			a.emit(Event{Type: TurnEnd, Turn: turn, Message: msg, Err: err})
 			return err
@@ -57,7 +57,7 @@ func (a *Agent) run(ctx context.Context) error {
 			a.emit(Event{Type: TurnEnd, Turn: turn, Message: msg})
 			return terminalError(msg)
 		}
-		if err := a.useTools(ctx, msg.ToolCalls()); err != nil {
+		if err := a.runTools(ctx, msg.ToolCalls); err != nil {
 			a.emit(Event{Type: TurnEnd, Turn: turn, Message: msg, Err: err})
 			return err
 		}
@@ -67,7 +67,7 @@ func (a *Agent) run(ctx context.Context) error {
 }
 
 func shouldRunTools(msg ai.Message) bool {
-	if len(msg.ToolCalls()) == 0 {
+	if len(msg.ToolCalls) == 0 {
 		return false
 	}
 	switch msg.StopReason {
@@ -82,7 +82,7 @@ func terminalError(msg ai.Message) error {
 	if msg.StopReason != ai.StopError {
 		return nil
 	}
-	if msg.Text() != "" {
+	if msg.Text != "" {
 		return nil
 	}
 	if msg.Error != "" {
@@ -93,7 +93,7 @@ func terminalError(msg ai.Message) error {
 
 // complete reads one model stream, stores the assistant message, and
 // forwards text deltas for the UI.
-func (a *Agent) complete(ctx context.Context) (ai.Message, error) {
+func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 	events, err := a.stream(ctx, a.request())
 	if err != nil {
 		return ai.Message{}, err
@@ -123,19 +123,19 @@ func (a *Agent) complete(ctx context.Context) (ai.Message, error) {
 			a.emit(Event{Type: MessageEnd, Message: msg})
 			return msg, nil
 		case ai.EventError:
-			return a.failStream(started, ev)
+			return a.finishStreamError(started, ev)
 		}
 	}
 	return ai.Message{}, errors.New("stream ended before the model finished")
 }
 
-func (a *Agent) failStream(started bool, ev ai.Event) (ai.Message, error) {
+func (a *Agent) finishStreamError(started bool, ev ai.Event) (ai.Message, error) {
 	err := ev.Err
 	if err == nil {
 		err = errors.New("model stream failed")
 	}
 	msg := ev.Message
-	if started || msg.Text() != "" || len(msg.ToolCalls()) > 0 {
+	if started || msg.Text != "" || len(msg.ToolCalls) > 0 {
 		if msg.Role == "" {
 			msg.Role = ai.RoleAssistant
 		}
@@ -150,37 +150,37 @@ func (a *Agent) failStream(started bool, ev ai.Event) (ai.Message, error) {
 	return msg, err
 }
 
-func (a *Agent) useTools(ctx context.Context, calls []ai.ToolCall) error {
+func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 	for i, call := range calls {
 		if err := ctx.Err(); err != nil {
-			a.abortCalls(calls[i:])
+			a.abortRemaining(calls[i:])
 			return err
 		}
-		a.oneTool(ctx, call)
+		a.runOneTool(ctx, call)
 		if err := ctx.Err(); err != nil {
-			a.abortCalls(calls[i+1:])
+			a.abortRemaining(calls[i+1:])
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *Agent) oneTool(ctx context.Context, call ai.ToolCall) {
+func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) {
 	args := normalizeArgs(call.Arguments)
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-	text, isErr := a.exec(ctx, call, args)
-	a.record(call, text, isErr)
+	text, isErr := a.callTool(ctx, call, args)
+	a.appendResult(call, text, isErr)
 }
 
-func (a *Agent) abortCalls(calls []ai.ToolCall) {
+func (a *Agent) abortRemaining(calls []ai.ToolCall) {
 	for _, call := range calls {
 		args := normalizeArgs(call.Arguments)
 		a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-		a.record(call, "aborted", true)
+		a.appendResult(call, "aborted", true)
 	}
 }
 
-func (a *Agent) record(call ai.ToolCall, text string, isError bool) {
+func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
 	msg := ai.ToolResult(call.ID, call.Name, text, isError)
 	a.add(msg)
 	a.emit(Event{
@@ -194,7 +194,7 @@ func (a *Agent) record(call ai.ToolCall, text string, isError bool) {
 	a.emit(Event{Type: MessageEnd, Message: msg})
 }
 
-func (a *Agent) exec(ctx context.Context, call ai.ToolCall, args []byte) (string, bool) {
+func (a *Agent) callTool(ctx context.Context, call ai.ToolCall, args []byte) (string, bool) {
 	if !json.Valid(args) {
 		return "invalid tool arguments: " + clip(string(call.Arguments), 200), true
 	}

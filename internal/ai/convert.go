@@ -7,34 +7,81 @@ import (
 	"strings"
 )
 
-// wireMessage is one OpenAI chat-completions message.
+// wireMessage is one OpenAI chat message. Tool call fields are flat here.
+// MarshalJSON on wireCall adds the nested "function" object the API expects.
 type wireMessage struct {
-	Role       string         `json:"role"`
-	Content    *string        `json:"content,omitempty"`
-	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role"`
+	Content    *string    `json:"content,omitempty"`
+	ToolCalls  []wireCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
-type wireToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function wireFunction `json:"function"`
+// wireCall is one tool call. Name and Arguments are not nested in Go.
+type wireCall struct {
+	ID        string
+	Name      string
+	Arguments string
 }
 
-type wireFunction struct {
+type wireFunctionBody struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 }
 
-type wireTool struct {
-	Type     string       `json:"type"`
-	Function wireToolSpec `json:"function"`
+type wireCallBody struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function wireFunctionBody `json:"function"`
 }
 
-type wireToolSpec struct {
+func (c wireCall) MarshalJSON() ([]byte, error) {
+	return marshalValue(wireCallBody{
+		ID:   c.ID,
+		Type: "function",
+		Function: wireFunctionBody{
+			Name:      c.Name,
+			Arguments: c.Arguments,
+		},
+	})
+}
+
+// wireTool is one tool schema. MarshalJSON wraps it as {"type":"function",...}.
+type wireTool struct {
+	Name        string
+	Description string
+	Parameters  Schema
+}
+
+type wireToolBody struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Parameters  Schema `json:"parameters"`
+}
+
+type wireToolEnvelope struct {
+	Type     string       `json:"type"`
+	Function wireToolBody `json:"function"`
+}
+
+func (t wireTool) MarshalJSON() ([]byte, error) {
+	return marshalValue(wireToolEnvelope{
+		Type: "function",
+		Function: wireToolBody{
+			Name:        t.Name,
+			Description: t.Description,
+			Parameters:  t.Parameters,
+		},
+	})
+}
+
+func marshalValue(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
 type wireRequest struct {
@@ -82,12 +129,12 @@ func toWireMessages(msgs []Message) ([]wireMessage, error) {
 func toWireMessage(msg Message) (wireMessage, error) {
 	switch msg.Role {
 	case RoleSystem, RoleUser:
-		text := msg.Text()
+		text := msg.Text
 		return wireMessage{Role: string(msg.Role), Content: &text}, nil
 	case RoleAssistant:
-		return assistantWire(msg), nil
+		return wireFromAssistant(msg), nil
 	case RoleToolResult:
-		text := msg.Text()
+		text := msg.Text
 		if msg.IsError {
 			text = "error: " + text
 		}
@@ -97,23 +144,21 @@ func toWireMessage(msg Message) (wireMessage, error) {
 	}
 }
 
-func assistantWire(msg Message) wireMessage {
+func wireFromAssistant(msg Message) wireMessage {
 	wire := wireMessage{Role: "assistant"}
-	if text := msg.Text(); text != "" {
+	if msg.Text != "" {
+		text := msg.Text
 		wire.Content = &text
 	}
-	for _, call := range msg.ToolCalls() {
+	for _, call := range msg.ToolCalls {
 		args := strings.TrimSpace(string(call.Arguments))
 		if args == "" {
 			args = "{}"
 		}
-		wire.ToolCalls = append(wire.ToolCalls, wireToolCall{
-			ID:   call.ID,
-			Type: "function",
-			Function: wireFunction{
-				Name:      call.Name,
-				Arguments: args,
-			},
+		wire.ToolCalls = append(wire.ToolCalls, wireCall{
+			ID:        call.ID,
+			Name:      call.Name,
+			Arguments: args,
 		})
 	}
 	return wire
@@ -126,12 +171,9 @@ func toWireTools(tools []Tool) []wireTool {
 	out := make([]wireTool, 0, len(tools))
 	for _, tool := range tools {
 		out = append(out, wireTool{
-			Type: "function",
-			Function: wireToolSpec{
-				Name:        tool.Name,
-				Description: tool.Description,
-				Parameters:  tool.Parameters,
-			},
+			Name:        tool.Name,
+			Description: tool.Description,
+			Parameters:  tool.Parameters,
 		})
 	}
 	return out

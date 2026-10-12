@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -13,18 +14,20 @@ import (
 
 const maxListEntries = 500
 
+type listArgs struct {
+	Path string `json:"path"`
+}
+
 func listTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
 		Name:        "list_dir",
-		Label:       "List directory",
-		Description: "List one directory in the workspace. path defaults to the workspace root. Directories end with a slash.",
+		Label:       "list_dir",
+		Description: "List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
-			"path": ai.StringProp("Directory path relative to the workspace. Defaults to the root"),
+			"path": ai.StringProperty("Directory to list (default: current directory)"),
 		}),
 		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args struct {
-				Path string `json:"path"`
-			}
+			var args listArgs
 			if len(strings.TrimSpace(string(raw))) == 0 {
 				raw = []byte("{}")
 			}
@@ -50,7 +53,7 @@ func listDir(ctx context.Context, ws *Workspace, path string) (string, error) {
 	info, err := os.Stat(abs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", notFound(path)
+			return "", missingPath(path)
 		}
 		return "", err
 	}
@@ -64,6 +67,9 @@ func listDir(ctx context.Context, ws *Workspace, path string) (string, error) {
 	if len(entries) == 0 {
 		return "(empty directory)", nil
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+	})
 	shown := entries
 	clipped := false
 	if len(shown) > maxListEntries {

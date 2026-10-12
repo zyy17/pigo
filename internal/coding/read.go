@@ -13,18 +13,20 @@ import (
 	"github.com/zyy17/pigo/internal/ai"
 )
 
+type readArgs struct {
+	Path string `json:"path"`
+}
+
 func readTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
 		Name:        "read_file",
-		Label:       "Read file",
-		Description: "Read a UTF-8 text file in the workspace. path is relative to the workspace root. Lines are numbered.",
+		Label:       "read_file",
+		Description: "Read the contents of a text file. Output is truncated. Lines are numbered. path is relative or absolute inside the workspace.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
-			"path": ai.StringProp("File path relative to the workspace"),
+			"path": ai.StringProperty("Path to the file to read (relative or absolute)"),
 		}, "path"),
 		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args struct {
-				Path string `json:"path"`
-			}
+			var args readArgs
 			if err := decodeArgs(raw, &args); err != nil {
 				return "", err
 			}
@@ -37,7 +39,7 @@ func readFile(ctx context.Context, ws *Workspace, path string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := needPath(path); err != nil {
+	if err := requirePath(path); err != nil {
 		return "", err
 	}
 	abs, err := ws.Resolve(path)
@@ -47,7 +49,7 @@ func readFile(ctx context.Context, ws *Workspace, path string) (string, error) {
 	info, err := os.Stat(abs)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", notFound(path)
+			return "", missingPath(path)
 		}
 		return "", err
 	}
@@ -72,14 +74,14 @@ func readFile(ctx context.Context, ws *Workspace, path string) (string, error) {
 	if !utf8.Valid(data) {
 		return "", fmt.Errorf("%s is not valid UTF-8 text", path)
 	}
-	text := numberLines(string(data))
+	text := lineNumbers(string(data))
 	if truncated {
 		text += "\n…(truncated)"
 	}
 	return text, nil
 }
 
-func numberLines(text string) string {
+func lineNumbers(text string) string {
 	if text == "" {
 		return "(empty)"
 	}
