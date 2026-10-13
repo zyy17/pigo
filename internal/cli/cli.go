@@ -109,7 +109,11 @@ Usage:
   pigo              chat in the current directory
   pigo -p "task"    run one task and exit
   pigo -w DIR       use DIR as the workspace
+
+Inside the session:
   /skill:name       load that skill, then an optional request
+  /reset            clear the transcript
+  /exit             quit
 
 Environment:
   PIGO_PROVIDER     chat backend (default openai)
@@ -152,6 +156,8 @@ func (a *app) repl() error {
 	fmt.Fprintf(a.out, "pigo  workspace %s  model %s\n", a.session.Root(), a.session.Model())
 	fmt.Fprintln(a.out, "Enter a task. /skill:name loads a skill. /exit quits. /reset clears the transcript.")
 	sc := bufio.NewScanner(a.in)
+	// The default token limit is 64KiB, which rejects a long pasted task.
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for {
 		fmt.Fprint(a.out, "you> ")
 		if !sc.Scan() {

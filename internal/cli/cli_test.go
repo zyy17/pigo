@@ -13,6 +13,22 @@ import (
 	"testing"
 )
 
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "pigo-cli-home-")
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("HOME", home); err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(home)
+	os.Exit(code)
+}
+
 func TestMissingAPIKey(t *testing.T) {
 	t.Setenv("PIGO_PROVIDER", "openai")
 	t.Setenv("OPENAI_API_KEY", "")
@@ -46,8 +62,12 @@ func TestHelp(t *testing.T) {
 	if err := run([]string{"-h"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "OPENAI_API_KEY") || !strings.Contains(out.String(), "PIGO_PROVIDER") || !strings.Contains(out.String(), "/skill:name") {
-		t.Fatalf("usage:\n%s", out.String())
+	text := out.String()
+	if !strings.Contains(text, "OPENAI_API_KEY") || !strings.Contains(text, "PIGO_PROVIDER") || !strings.Contains(text, "/skill:name") {
+		t.Fatalf("usage:\n%s", text)
+	}
+	if !strings.Contains(text, "Inside the session:") {
+		t.Fatalf("usage listed /skill:name as a flag:\n%s", text)
 	}
 }
 
@@ -62,6 +82,22 @@ func TestREPLCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "transcript cleared") {
+		t.Fatalf("output:\n%s", out.String())
+	}
+}
+
+func TestREPLAcceptsLongLine(t *testing.T) {
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("OPENAI_MODEL", "test-model")
+	line := strings.Repeat("a", 80*1024)
+	var out bytes.Buffer
+	err := run([]string{"-w", t.TempDir()}, strings.NewReader(line+"\n/exit\n"), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "token too long") {
 		t.Fatalf("output:\n%s", out.String())
 	}
 }
