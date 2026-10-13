@@ -1,3 +1,5 @@
+<p align="center"><img alt="pigo logo" src="docs/images/logo.svg" width="128"></p>
+
 # pigo
 
 [English](README.md) · [设计说明](docs/design.zh-CN.md)

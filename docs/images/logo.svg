@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800">
+  <!-- Go-logo speed lines -->
+  <g fill="#00ADD8">
+    <rect x="40" y="200" width="95" height="22" rx="11"/>
+    <rect x="70" y="250" width="65" height="22" rx="11"/>
+    <rect x="20" y="300" width="115" height="22" rx="11"/>
+  </g>
+  <!-- gopher ears -->
+  <circle cx="200" cy="165" r="38" fill="#00ADD8"/><circle cx="200" cy="165" r="18" fill="#5DC9E2"/>
+  <circle cx="482" cy="165" r="38" fill="#00ADD8"/><circle cx="482" cy="165" r="18" fill="#5DC9E2"/>
+  <!-- pi blocks -->
+  <path fill="#00ADD8" d="M165.29 165.29H517.36V400H400V282.65H165.29Z"/>
+  <path fill="#F09082" d="M165.29 282.65H282.65V400H400V517.36H282.65V634.72H165.29Z"/>
+  <path fill="#F1BE58" d="M517.36 400H634.72V634.72H517.36Z"/>
+  <!-- gopher eyes -->
+  <circle cx="270" cy="215" r="42" fill="#fff" stroke="#1C2B3A" stroke-width="6"/><circle cx="284" cy="220" r="17" fill="#1C2B3A"/>
+  <circle cx="412" cy="215" r="42" fill="#fff" stroke="#1C2B3A" stroke-width="6"/><circle cx="426" cy="220" r="17" fill="#1C2B3A"/>
+  <!-- snout, nose, teeth -->
+  <ellipse cx="341" cy="262" rx="40" ry="24" fill="#F6D2A2"/>
+  <ellipse cx="341" cy="249" rx="17" ry="11" fill="#1C2B3A"/>
+  <rect x="327" y="276" width="28" height="26" rx="4" fill="#fff" stroke="#1C2B3A" stroke-width="4"/>
+  <line x1="341" y1="276" x2="341" y2="302" stroke="#1C2B3A" stroke-width="4"/>
+</svg>
