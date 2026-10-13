@@ -1,4 +1,4 @@
-<p align="center"><img alt="pigo logo" src="docs/images/logo.svg" width="200"></p>
+<p align="center"><img alt="pigo logo" src="docs/images/logo.svg" width="320"></p>
 
 # pigo
 
