@@ -77,6 +77,31 @@ func TestFileTools(t *testing.T) {
 	}
 }
 
+func TestReadTruncatedUTF8(t *testing.T) {
+	ws := openTemp(t)
+	var body strings.Builder
+	body.WriteString(strings.Repeat("a", maxFileBytes-1))
+	body.WriteString("世")
+	if err := os.WriteFile(filepath.Join(ws.Root(), "wide.txt"), []byte(body.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	read := mustTool(t, ws, "read_file")
+	got, err := read.Execute(context.Background(), jsonArg(t, map[string]string{"path": "wide.txt"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "truncated") || strings.Contains(got, "世") {
+		t.Fatal("truncated read was not valid text ending before the cut rune")
+	}
+
+	if err := os.WriteFile(filepath.Join(ws.Root(), "wide.txt"), []byte{0xff, 0xfe}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := read.Execute(context.Background(), jsonArg(t, map[string]string{"path": "wide.txt"})); err == nil || !strings.Contains(err.Error(), "UTF-8") {
+		t.Fatalf("binary read: %v", err)
+	}
+}
+
 func TestRunCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell test uses sh")

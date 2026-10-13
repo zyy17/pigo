@@ -69,7 +69,7 @@ func readFile(ctx context.Context, ws *Workspace, skillDirs []string, path strin
 	}
 	truncated := len(data) > maxFileBytes
 	if truncated {
-		data = data[:maxFileBytes]
+		data = trimPartialRune(data[:maxFileBytes])
 	}
 	if !utf8.Valid(data) {
 		return "", fmt.Errorf("%s is not valid UTF-8 text", path)
@@ -79,6 +79,22 @@ func readFile(ctx context.Context, ws *Workspace, skillDirs []string, path strin
 		text += "\n…(truncated)"
 	}
 	return text, nil
+}
+
+// trimPartialRune drops a UTF-8 sequence that the size cap cut in half.
+// A valid file must still be readable when the cut lands inside a character.
+func trimPartialRune(data []byte) []byte {
+	for range utf8.UTFMax {
+		if len(data) == 0 || utf8.Valid(data) {
+			return data
+		}
+		last := data[len(data)-1]
+		data = data[:len(data)-1]
+		if utf8.RuneStart(last) {
+			return data
+		}
+	}
+	return data
 }
 
 func lineNumbers(text string) string {
