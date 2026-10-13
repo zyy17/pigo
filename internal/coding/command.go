@@ -86,13 +86,14 @@ func newShellCommand(ctx context.Context, command string) *exec.Cmd {
 	return cmd
 }
 
-// shellEnv hides the API key and points PWD at the workspace.
+// shellEnv hides OPENAI_API_KEY and points PWD at the workspace.
+// The model can run commands, so the key must not be visible there.
 func shellEnv(root string) []string {
 	env := os.Environ()
 	out := make([]string, 0, len(env)+1)
 	for _, kv := range env {
 		switch {
-		case strings.HasPrefix(kv, "PIGO_API_KEY="),
+		case strings.HasPrefix(kv, "OPENAI_API_KEY="),
 			strings.HasPrefix(kv, "PWD="),
 			strings.HasPrefix(kv, "OLDPWD="):
 			continue

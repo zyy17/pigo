@@ -34,10 +34,14 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	ep, err := endpointFromEnv(opts.baseURL, opts.model)
+	if err != nil {
+		return err
+	}
 	session, err := coding.New(coding.Config{
-		APIKey:    os.Getenv("PIGO_API_KEY"),
-		BaseURL:   firstNonEmpty(opts.baseURL, os.Getenv("PIGO_BASE_URL")),
-		Model:     firstNonEmpty(opts.model, os.Getenv("PIGO_MODEL")),
+		APIKey:    ep.apiKey,
+		BaseURL:   ep.baseURL,
+		Model:     ep.model,
 		Workspace: firstNonEmpty(opts.workspace, "."),
 	})
 	if err != nil {
@@ -79,8 +83,8 @@ func parseArgs(args []string, out io.Writer) (options, error) {
 	var opts options
 	fs.StringVar(&opts.prompt, "p", "", "run one prompt and exit")
 	fs.StringVar(&opts.workspace, "w", "", "workspace directory (default: current directory)")
-	fs.StringVar(&opts.model, "model", "", "model name (default: PIGO_MODEL or gpt-4o-mini)")
-	fs.StringVar(&opts.baseURL, "base-url", "", "API root (default: PIGO_BASE_URL or https://api.openai.com/v1)")
+	fs.StringVar(&opts.model, "model", "", "model name (default: OPENAI_MODEL or gpt-4o-mini)")
+	fs.StringVar(&opts.baseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
 	fs.Usage = func() { writeUsage(out, fs) }
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -107,9 +111,10 @@ Usage:
   pigo -w DIR       use DIR as the workspace
 
 Environment:
-  PIGO_API_KEY      API key (required)
-  PIGO_BASE_URL     OpenAI-compatible API root (default https://api.openai.com/v1)
-  PIGO_MODEL        model name (default gpt-4o-mini)
+  PIGO_PROVIDER     chat backend (default openai)
+  OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
+  OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
+  OPENAI_MODEL      model name that endpoint accepts (default gpt-4o-mini)
 
 `)
 	fs.SetOutput(out)

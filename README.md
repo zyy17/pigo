@@ -75,7 +75,7 @@ Go 1.27 or newer.
 
 ```bash
 cp .env.example .env
-# set PIGO_API_KEY, and PIGO_BASE_URL / PIGO_MODEL if you are not using OpenAI
+# set OPENAI_API_KEY. PIGO_PROVIDER defaults to openai.
 
 make build
 ./pigo
@@ -105,9 +105,10 @@ go run . -p "List the files here"
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
-| `PIGO_API_KEY` | Bearer token | required |
-| `PIGO_BASE_URL` | API root, usually ending in `/v1` | `https://api.openai.com/v1` |
-| `PIGO_MODEL` | Model name the endpoint accepts | `gpt-4o-mini` |
+| `PIGO_PROVIDER` | Chat backend. `openai` is an OpenAI-compatible chat-completions endpoint | `openai` |
+| `OPENAI_API_KEY` | Bearer token when the provider is `openai` | required |
+| `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
+| `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-4o-mini` |
 
 Flags `-base-url`, `-model`, and `-w` override the environment. The API key stays in the environment so it does not land in shell history. A `.env` file in the current directory fills in variables that are not already set.
 

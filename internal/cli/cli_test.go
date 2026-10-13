@@ -14,9 +14,19 @@ import (
 )
 
 func TestMissingAPIKey(t *testing.T) {
-	t.Setenv("PIGO_API_KEY", "")
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "")
 	err := run([]string{"-p", "hi", "-w", t.TempDir()}, strings.NewReader(""), &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "PIGO_API_KEY") {
+	if err == nil || !strings.Contains(err.Error(), "OPENAI_API_KEY") {
+		t.Fatal(err)
+	}
+}
+
+func TestUnknownProvider(t *testing.T) {
+	t.Setenv("PIGO_PROVIDER", "anthropic")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	err := run([]string{"-p", "hi", "-w", t.TempDir()}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `unknown PIGO_PROVIDER "anthropic"`) {
 		t.Fatal(err)
 	}
 }
@@ -26,15 +36,16 @@ func TestHelp(t *testing.T) {
 	if err := run([]string{"-h"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "PIGO_API_KEY") || !strings.Contains(out.String(), "-p") {
+	if !strings.Contains(out.String(), "OPENAI_API_KEY") || !strings.Contains(out.String(), "PIGO_PROVIDER") || !strings.Contains(out.String(), "-p") {
 		t.Fatalf("usage:\n%s", out.String())
 	}
 }
 
 func TestREPLCommands(t *testing.T) {
-	t.Setenv("PIGO_API_KEY", "test-key")
-	t.Setenv("PIGO_BASE_URL", "http://127.0.0.1:1")
-	t.Setenv("PIGO_MODEL", "test-model")
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("OPENAI_MODEL", "test-model")
 	var out bytes.Buffer
 	err := run([]string{"-w", t.TempDir()}, strings.NewReader("/reset\n/exit\n"), &out)
 	if err != nil {
@@ -81,9 +92,10 @@ func TestOneShotCreatesFile(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	t.Setenv("PIGO_API_KEY", "test-key")
-	t.Setenv("PIGO_BASE_URL", srv.URL+"/v1")
-	t.Setenv("PIGO_MODEL", "test-model")
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
+	t.Setenv("OPENAI_MODEL", "test-model")
 
 	var out bytes.Buffer
 	err := run([]string{"-w", dir, "-p", "create hello.txt"}, strings.NewReader(""), &out)
@@ -109,24 +121,24 @@ func TestOneShotCreatesFile(t *testing.T) {
 func TestDotEnv(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "local.env")
-	body := "# comment\nexport PIGO_MODEL=\"from-file\"\nPIGO_BASE_URL=http://example.test/v1\nPIGO_API_KEY='secret'\n"
+	body := "# comment\nexport OPENAI_MODEL=\"from-file\"\nOPENAI_BASE_URL=http://example.test/v1\nOPENAI_API_KEY='secret'\n"
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("PIGO_MODEL", "already")
-	t.Setenv("PIGO_BASE_URL", "")
-	t.Setenv("PIGO_API_KEY", "")
+	t.Setenv("OPENAI_MODEL", "already")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_API_KEY", "")
 	if err := loadDotEnv(path); err != nil {
 		t.Fatal(err)
 	}
-	if os.Getenv("PIGO_MODEL") != "already" {
-		t.Fatalf("model overridden: %s", os.Getenv("PIGO_MODEL"))
+	if os.Getenv("OPENAI_MODEL") != "already" {
+		t.Fatalf("model overridden: %s", os.Getenv("OPENAI_MODEL"))
 	}
-	if os.Getenv("PIGO_BASE_URL") != "http://example.test/v1" {
-		t.Fatalf("base url %s", os.Getenv("PIGO_BASE_URL"))
+	if os.Getenv("OPENAI_BASE_URL") != "http://example.test/v1" {
+		t.Fatalf("base url %s", os.Getenv("OPENAI_BASE_URL"))
 	}
-	if os.Getenv("PIGO_API_KEY") != "secret" {
-		t.Fatalf("api key %q", os.Getenv("PIGO_API_KEY"))
+	if os.Getenv("OPENAI_API_KEY") != "secret" {
+		t.Fatalf("api key %q", os.Getenv("OPENAI_API_KEY"))
 	}
 }
 

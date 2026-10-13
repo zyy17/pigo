@@ -2,7 +2,7 @@ package coding
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -74,7 +74,7 @@ func (c Config) stream() (ai.StreamFunc, error) {
 		return c.Stream, nil
 	}
 	if strings.TrimSpace(c.APIKey) == "" {
-		return nil, fmt.Errorf("PIGO_API_KEY is not set (export it or add it to .env)")
+		return nil, errors.New("API key is not set")
 	}
 	client := &ai.Client{BaseURL: c.BaseURL, APIKey: c.APIKey}
 	return client.Stream, nil

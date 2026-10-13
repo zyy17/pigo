@@ -98,8 +98,8 @@ func TestRunCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("PIGO_API_KEY", "super-secret-value")
-	out, err = tool.Execute(ctx, jsonArg(t, map[string]string{"command": "printenv PIGO_API_KEY || true"}))
+	t.Setenv("OPENAI_API_KEY", "super-secret-value")
+	out, err = tool.Execute(ctx, jsonArg(t, map[string]string{"command": "printenv OPENAI_API_KEY || true"}))
 	if err != nil {
 		t.Fatal(err)
 	}
