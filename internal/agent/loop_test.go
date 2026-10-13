@@ -134,6 +134,69 @@ func TestMaxTurns(t *testing.T) {
 	}
 }
 
+func TestStreamErrorPairsToolCalls(t *testing.T) {
+	script := &fakeModel{
+		streamErr: errors.New("connection reset"),
+		msgs: []ai.Message{
+			ai.Assistant("partial", ai.StopToolUse, call("c1", "echo", map[string]any{"text": "x"})),
+			ai.Assistant("recovered", ai.StopStop),
+		},
+	}
+	var ran bool
+	tool := echoTool()
+	tool.Execute = func(ctx context.Context, args []byte) (string, error) {
+		ran = true
+		return "ran", nil
+	}
+	ag := newAgent(t, script, tool)
+	err := ag.Prompt(context.Background(), "go")
+	if err == nil || !strings.Contains(err.Error(), "connection reset") {
+		t.Fatal(err)
+	}
+	if ran {
+		t.Fatal("tool ran after a stream error")
+	}
+	if err := ag.Prompt(context.Background(), "again"); err != nil {
+		t.Fatal(err)
+	}
+	if got := roles(script.reqs[1].Messages); got != "system,user,assistant,toolResult,user" {
+		t.Fatalf("second request %s", got)
+	}
+	result := script.reqs[1].Messages[3]
+	if !result.IsError || result.ToolCallID != "c1" || !strings.Contains(result.Text, "connection reset") {
+		t.Fatalf("result %#v", result)
+	}
+}
+
+func TestStopErrorPairsToolCalls(t *testing.T) {
+	blocked := ai.Assistant("", ai.StopError, call("c1", "echo", map[string]any{}))
+	blocked.Error = "content filter"
+	script := &fakeModel{msgs: []ai.Message{
+		blocked,
+		ai.Assistant("next", ai.StopStop),
+	}}
+	var ran bool
+	tool := echoTool()
+	tool.Execute = func(ctx context.Context, args []byte) (string, error) {
+		ran = true
+		return "ran", nil
+	}
+	ag := newAgent(t, script, tool)
+	err := ag.Prompt(context.Background(), "go")
+	if err == nil || !strings.Contains(err.Error(), "content filter") {
+		t.Fatal(err)
+	}
+	if ran {
+		t.Fatal("tool ran after content filter")
+	}
+	if err := ag.Prompt(context.Background(), "again"); err != nil {
+		t.Fatal(err)
+	}
+	if got := roles(script.reqs[1].Messages); got != "system,user,assistant,toolResult,user" {
+		t.Fatalf("second request %s", got)
+	}
+}
+
 func TestAbortPairsRemainingCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var ran int
@@ -226,10 +289,11 @@ func roles(msgs []ai.Message) string {
 }
 
 type fakeModel struct {
-	mu   sync.Mutex
-	msgs []ai.Message
-	i    int
-	reqs []ai.Request
+	mu        sync.Mutex
+	msgs      []ai.Message
+	i         int
+	reqs      []ai.Request
+	streamErr error
 }
 
 func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event, error) {
@@ -241,9 +305,15 @@ func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event
 	}
 	msg := f.msgs[f.i]
 	f.i++
+	streamErr := f.streamErr
+	f.streamErr = nil
 	ch := make(chan ai.Event, 2)
 	go func() {
 		defer close(ch)
+		if streamErr != nil {
+			ch <- ai.Event{Type: ai.EventError, Err: streamErr, Message: msg}
+			return
+		}
 		if text := msg.Text; text != "" {
 			ch <- ai.Event{Type: ai.EventTextDelta, Text: text}
 		}

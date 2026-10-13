@@ -52,10 +52,12 @@ func (a *Agent) run(ctx context.Context) error {
 
 		msg, err := a.readAssistant(ctx)
 		if err != nil {
+			a.closeCalls(msg)
 			a.emit(Event{Type: TurnEnd, Turn: turn, Message: msg, Err: err})
 			return err
 		}
 		if !shouldRunTools(msg) {
+			a.closeCalls(msg)
 			a.emit(Event{Type: TurnEnd, Turn: turn, Message: msg})
 			return terminalError(msg)
 		}
@@ -172,6 +174,22 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) {
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
 	text, isErr := a.callTool(ctx, call, args)
 	a.appendResult(call, text, isErr)
+}
+
+// closeCalls records a result for tool calls that will not run.
+// A stream error or a stop reason such as content_filter can leave calls on
+// the assistant message. The next request is invalid without a result for each.
+func (a *Agent) closeCalls(msg ai.Message) {
+	if len(msg.ToolCalls) == 0 {
+		return
+	}
+	text := msg.Error
+	if text == "" {
+		text = "not executed"
+	}
+	for _, call := range msg.ToolCalls {
+		a.appendResult(call, text, true)
+	}
 }
 
 // abortRemaining still records a result for each call that did not run.
