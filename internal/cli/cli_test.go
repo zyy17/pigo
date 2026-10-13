@@ -31,12 +31,22 @@ func TestUnknownProvider(t *testing.T) {
 	}
 }
 
+func TestUnknownSkill(t *testing.T) {
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", "http://127.0.0.1:1")
+	err := run([]string{"-p", "/skill:missing", "-w", t.TempDir()}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `unknown skill "missing"`) {
+		t.Fatal(err)
+	}
+}
+
 func TestHelp(t *testing.T) {
 	var out bytes.Buffer
 	if err := run([]string{"-h"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "OPENAI_API_KEY") || !strings.Contains(out.String(), "PIGO_PROVIDER") || !strings.Contains(out.String(), "-p") {
+	if !strings.Contains(out.String(), "OPENAI_API_KEY") || !strings.Contains(out.String(), "PIGO_PROVIDER") || !strings.Contains(out.String(), "/skill:name") {
 		t.Fatalf("usage:\n%s", out.String())
 	}
 }

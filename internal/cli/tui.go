@@ -68,7 +68,7 @@ func newChat(session *coding.Session, events chan agent.Event) chatModel {
 		events:  events,
 		lines: []chatLine{{
 			kind: kindInfo,
-			text: "Ask for a small coding task. /reset clears the chat. /exit quits.",
+			text: "Ask for a small coding task. /skill:name loads a skill. /reset clears the chat. /exit quits.",
 		}},
 	}
 }
@@ -165,11 +165,17 @@ func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
 		m.input.SetValue("")
 		return m, nil
 	}
+	expanded, err := commandText(m.session, text)
+	if err != nil {
+		m.add(kindError, err.Error())
+		m.input.SetValue("")
+		return m, nil
+	}
 	m.busy = true
 	m.streaming = false
 	m.add(kindUser, text)
 	m.input.SetValue("")
-	return m, tea.Batch(listen(m.events), m.runPrompt(text))
+	return m, tea.Batch(listen(m.events), m.runPrompt(expanded))
 }
 
 func (m chatModel) runPrompt(text string) tea.Cmd {

@@ -52,7 +52,7 @@ func run(args []string, in io.Reader, out io.Writer) error {
 		session.Subscribe(func(ev agent.Event) { render(out, ev) })
 		stop := app.watchSignals()
 		defer stop()
-		return app.prompt(opts.prompt)
+		return app.runLine(opts.prompt)
 	}
 	if interactiveTerminal(in, out) {
 		return runTUI(session)
@@ -109,6 +109,7 @@ Usage:
   pigo              chat in the current directory
   pigo -p "task"    run one task and exit
   pigo -w DIR       use DIR as the workspace
+  /skill:name       load that skill, then an optional request
 
 Environment:
   PIGO_PROVIDER     chat backend (default openai)
@@ -149,7 +150,7 @@ func (a *app) watchSignals() func() {
 
 func (a *app) repl() error {
 	fmt.Fprintf(a.out, "pigo  workspace %s  model %s\n", a.session.Root(), a.session.Model())
-	fmt.Fprintln(a.out, "Enter a task. /exit quits. /reset clears the transcript.")
+	fmt.Fprintln(a.out, "Enter a task. /skill:name loads a skill. /exit quits. /reset clears the transcript.")
 	sc := bufio.NewScanner(a.in)
 	for {
 		fmt.Fprint(a.out, "you> ")
@@ -168,7 +169,7 @@ func (a *app) repl() error {
 			fmt.Fprintln(a.out, "transcript cleared")
 			continue
 		}
-		if err := a.prompt(line); err != nil {
+		if err := a.runLine(line); err != nil {
 			if errors.Is(err, agent.ErrInterrupted) {
 				fmt.Fprintln(a.out, "interrupted")
 				continue
@@ -176,6 +177,14 @@ func (a *app) repl() error {
 			fmt.Fprintf(a.out, "error: %v\n", err)
 		}
 	}
+}
+
+func (a *app) runLine(line string) error {
+	text, err := commandText(a.session, line)
+	if err != nil {
+		return err
+	}
+	return a.prompt(text)
 }
 
 func (a *app) prompt(text string) error {
