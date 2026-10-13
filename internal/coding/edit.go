@@ -82,7 +82,7 @@ func editFile(ctx context.Context, ws *Workspace, path, old, new string, replace
 	if count > 1 && !replaceAll {
 		return "", fmt.Errorf("old_string matched %d times; include more context or set replace_all", count)
 	}
-	updated := content
+	var updated string
 	if replaceAll {
 		updated = strings.ReplaceAll(content, old, new)
 	} else {

@@ -1,4 +1,4 @@
-.PHONY: build test run fmt
+.PHONY: build test run fmt lint
 
 build:
 	go build -o pigo .
@@ -11,3 +11,6 @@ run:
 
 fmt:
 	gofmt -w .
+
+lint:
+	golangci-lint run ./...

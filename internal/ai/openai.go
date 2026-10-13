@@ -38,22 +38,26 @@ func (c *Client) Stream(ctx context.Context, req Request) (<-chan Event, error) 
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("User-Agent", "pigo")
 
-	resp, err := c.httpClient().Do(httpReq)
+	// The body stays open until readStream finishes. A non-2xx status closes it here.
+	resp, err := c.httpClient().Do(httpReq) //nolint:bodyclose // readStream closes the body
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		defer resp.Body.Close()
-		return nil, httpStatusError(resp)
+		err := httpStatusError(resp)
+		_ = resp.Body.Close()
+		return nil, err
 	}
 
 	ch := make(chan Event)
-	go func() {
-		defer close(ch)
-		defer resp.Body.Close()
-		parseSSE(ctx, resp.Body, ch)
-	}()
+	go readStream(ctx, resp.Body, ch)
 	return ch, nil
+}
+
+func readStream(ctx context.Context, body io.ReadCloser, out chan<- Event) {
+	defer close(out)
+	defer body.Close()
+	parseSSE(ctx, body, out)
 }
 
 func (c *Client) endpoint() string {

@@ -7,7 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 	"github.com/zyy17/pigo/internal/coding"
@@ -130,12 +131,12 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "pgup":
 		if m.ready {
-			m.view.HalfViewUp()
+			m.view.HalfPageUp()
 		}
 		return m, nil
 	case "pgdown":
 		if m.ready {
-			m.view.HalfViewDown()
+			m.view.HalfPageDown()
 		}
 		return m, nil
 	case "enter":

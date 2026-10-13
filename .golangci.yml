@@ -1,0 +1,50 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - intrange
+    - misspell
+    - noctx
+    - revive
+    - unconvert
+    - wastedassign
+  settings:
+    errcheck:
+      # Closing a file or response body after a successful read is not actionable
+      # here. bodyclose still requires every HTTP response body to be closed.
+      # Printing to the terminal fails only when the process is already dying.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - io.WriteString
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/zyy17/pigo
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

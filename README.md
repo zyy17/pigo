@@ -96,12 +96,16 @@ From source:
 
 ```bash
 make test
+make lint
 make run
 # or
 go build -o pigo .
 go test ./...
+golangci-lint run ./...
 go run . -p "List the files here"
 ```
+
+`make lint` runs [golangci-lint](https://golangci-lint.run/) v2 with `.golangci.yml`. CI runs `go test ./...` and the same lint command.
 
 | Variable | Meaning | Default |
 | --- | --- | --- |
