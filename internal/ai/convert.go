@@ -65,12 +65,8 @@ type wireToolEnvelope struct {
 
 func (t wireTool) MarshalJSON() ([]byte, error) {
 	return marshalValue(wireToolEnvelope{
-		Type: "function",
-		Function: wireToolBody{
-			Name:        t.Name,
-			Description: t.Description,
-			Parameters:  t.Parameters,
-		},
+		Type:     "function",
+		Function: wireToolBody(t),
 	})
 }
 
@@ -91,6 +87,8 @@ type wireRequest struct {
 	Stream   bool          `json:"stream"`
 }
 
+// encodeRequest translates the transcript into an OpenAI chat-completions body.
+// Tool results stay role toolResult in memory and become role "tool" only here.
 func encodeRequest(req Request) ([]byte, error) {
 	messages, err := toWireMessages(req.Messages)
 	if err != nil {
@@ -170,11 +168,7 @@ func toWireTools(tools []Tool) []wireTool {
 	}
 	out := make([]wireTool, 0, len(tools))
 	for _, tool := range tools {
-		out = append(out, wireTool{
-			Name:        tool.Name,
-			Description: tool.Description,
-			Parameters:  tool.Parameters,
-		})
+		out = append(out, wireTool(tool))
 	}
 	return out
 }

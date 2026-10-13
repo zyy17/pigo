@@ -39,8 +39,8 @@ func (w *Workspace) Root() string {
 }
 
 // Resolve turns path into an absolute path inside the workspace.
-// Relative paths start at the workspace root. Symlinks are followed,
-// and a target outside the root is rejected.
+// Relative paths start at the workspace root. The check uses the
+// symlink-resolved path, so a link inside the root cannot escape it.
 func (w *Workspace) Resolve(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {

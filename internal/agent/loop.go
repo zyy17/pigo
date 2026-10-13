@@ -41,6 +41,8 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 	return err
 }
 
+// run asks the model, runs any tool calls, and asks again.
+// One pass is one model call. The next pass sees the tool results.
 func (a *Agent) run(ctx context.Context) error {
 	for turn := 1; turn <= a.maxTurns; turn++ {
 		if err := ctx.Err(); err != nil {
@@ -91,8 +93,8 @@ func terminalError(msg ai.Message) error {
 	return errors.New("the model returned an error")
 }
 
-// complete reads one model stream, stores the assistant message, and
-// forwards text deltas for the UI.
+// readAssistant reads one model stream and stores the assistant message.
+// Deltas are for the UI. The done event is the message the transcript keeps.
 func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 	events, err := a.stream(ctx, a.request())
 	if err != nil {
@@ -172,6 +174,8 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) {
 	a.appendResult(call, text, isErr)
 }
 
+// abortRemaining still records a result for each call that did not run.
+// An assistant message with an unpaired tool call makes the next request invalid.
 func (a *Agent) abortRemaining(calls []ai.ToolCall) {
 	for _, call := range calls {
 		args := normalizeArgs(call.Arguments)
@@ -180,6 +184,8 @@ func (a *Agent) abortRemaining(calls []ai.ToolCall) {
 	}
 }
 
+// appendResult pairs a tool call with its result. The result uses the call's
+// ID. The next model request needs that pair.
 func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
 	msg := ai.ToolResult(call.ID, call.Name, text, isError)
 	a.add(msg)

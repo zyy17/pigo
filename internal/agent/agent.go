@@ -114,6 +114,8 @@ func (a *Agent) emit(ev Event) {
 	}
 }
 
+// request builds one model call. The system prompt is attached here and is
+// not copied into the stored transcript.
 func (a *Agent) request() ai.Request {
 	return ai.Request{
 		Model:    a.state.Model,
