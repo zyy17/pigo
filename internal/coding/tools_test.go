@@ -131,7 +131,7 @@ func openTemp(t *testing.T) *Workspace {
 
 func mustTool(t *testing.T, ws *Workspace, name string) agent.Tool {
 	t.Helper()
-	for _, tool := range Tools(ws) {
+	for _, tool := range Tools(ws, nil) {
 		if tool.Name == name {
 			return tool
 		}

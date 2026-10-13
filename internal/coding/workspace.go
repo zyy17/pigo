@@ -67,7 +67,11 @@ func (w *Workspace) Resolve(path string) (string, error) {
 }
 
 func (w *Workspace) withinRoot(path string) bool {
-	rel, err := filepath.Rel(w.root, path)
+	return containsPath(w.root, path)
+}
+
+func containsPath(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
 	if err != nil {
 		return false
 	}
@@ -96,4 +100,38 @@ func nearestExisting(path string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(realParent, filepath.Base(path)), nil
+}
+
+// readablePath resolves a path for read_file.
+// The workspace check still comes first. A discovered skill directory is an
+// extra root so the model can open SKILL.md that lives outside the project,
+// such as ~/.pi/agent/skills. write_file and edit_file do not use this.
+func readablePath(ws *Workspace, skillDirs []string, path string) (string, error) {
+	abs, err := ws.Resolve(path)
+	if err == nil {
+		return abs, nil
+	}
+	if filepath.IsAbs(path) {
+		if skillAbs, skillErr := resolveSkillPath(path, skillDirs); skillErr == nil {
+			return skillAbs, nil
+		}
+	}
+	return "", err
+}
+
+func resolveSkillPath(path string, roots []string) (string, error) {
+	real, err := nearestExisting(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	for _, root := range roots {
+		realRoot, err := nearestExisting(root)
+		if err != nil {
+			continue
+		}
+		if containsPath(realRoot, real) {
+			return real, nil
+		}
+	}
+	return "", fmt.Errorf("%q is outside the workspace", path)
 }

@@ -4,22 +4,28 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/zyy17/pigo/internal/skills"
 )
 
-// Pi also adds docs, skills, and project-context sections. pigo has no
-// docs tree, skill catalog, or context files, so those sections are omitted.
-// The remaining text is Pi's coding-agent prompt, with this clone's tool names.
+// Pi also adds docs and project-context sections. pigo has no docs tree
+// or context files, so those sections are omitted. Skills are included when
+// any were discovered. The remaining text is Pi's coding-agent prompt,
+// with this clone's tool names.
 
 const preamble = "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files."
 
 // buildSystemPrompt joins the preamble and the tagged sections the way Pi renders a system message.
-func buildSystemPrompt(root string) string {
+func buildSystemPrompt(root string, list []skills.Skill) string {
 	parts := []string{
 		preamble,
 		wrapSection("tools", toolSection()),
 		wrapSection("rules", ruleSection()),
-		wrapSection("cwd", filepath.ToSlash(root)),
 	}
+	if section := skills.Format(list); section != "" {
+		parts = append(parts, wrapSection("skills", section))
+	}
+	parts = append(parts, wrapSection("cwd", filepath.ToSlash(root)))
 	return strings.Join(parts, "\n\n")
 }
 

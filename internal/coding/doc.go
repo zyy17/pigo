@@ -1,5 +1,5 @@
 // Package coding is the product surface, the role Pi calls pi-coding-agent.
 //
-// It confines file paths to one workspace, offers the coding tools, and
-// wires those tools into an agent session. It does not speak HTTP.
+// It confines file paths to one workspace, offers the coding tools, discovers
+// skills, and wires those tools into an agent session. It does not speak HTTP.
 package coding

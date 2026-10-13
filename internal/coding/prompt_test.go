@@ -3,10 +3,12 @@ package coding
 import (
 	"strings"
 	"testing"
+
+	"github.com/zyy17/pigo/internal/skills"
 )
 
 func TestSystemPromptFollowsPi(t *testing.T) {
-	got := buildSystemPrompt("/work/app")
+	got := buildSystemPrompt("/work/app", nil)
 	want := []string{
 		"You are an expert coding assistant operating inside pi, a coding agent harness.",
 		"<tools>",
@@ -27,5 +29,17 @@ func TestSystemPromptFollowsPi(t *testing.T) {
 		if !strings.Contains(got, part) {
 			t.Fatalf("prompt missing %q:\n%s", part, got)
 		}
+	}
+	if strings.Contains(got, "<skills>") {
+		t.Fatal("empty skill list should not add a skills section")
+	}
+
+	withSkill := buildSystemPrompt("/work/app", []skills.Skill{{
+		Name:        "explain-go",
+		Description: "Explain Go code",
+		Path:        "/work/app/.pi/skills/explain-go/SKILL.md",
+	}})
+	if !strings.Contains(withSkill, "<name>explain-go</name>") || !strings.Contains(withSkill, "<skills>") {
+		t.Fatalf("skill was not injected:\n%s", withSkill)
 	}
 }

@@ -3,10 +3,13 @@ package coding
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
+	"github.com/zyy17/pigo/internal/skills"
 )
 
 const (
@@ -16,20 +19,23 @@ const (
 
 // Config selects the model endpoint and the workspace.
 // Stream, when set, replaces the HTTP client. Tests use it.
+// UserSkillsDir overrides ~/.pi/agent/skills. An empty value uses that default.
 type Config struct {
-	APIKey    string
-	BaseURL   string
-	Model     string
-	Workspace string
-	MaxTurns  int
-	Stream    ai.StreamFunc
+	APIKey        string
+	BaseURL       string
+	Model         string
+	Workspace     string
+	UserSkillsDir string
+	MaxTurns      int
+	Stream        ai.StreamFunc
 }
 
 // Session is one coding-agent conversation in a workspace.
 type Session struct {
-	agent *agent.Agent
-	root  string
-	model string
+	agent  *agent.Agent
+	root   string
+	model  string
+	skills []skills.Skill
 }
 
 // New opens the workspace and builds the agent.
@@ -43,17 +49,35 @@ func New(cfg Config) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	userDir := cfg.UserSkillsDir
+	if strings.TrimSpace(userDir) == "" {
+		userDir = skills.DefaultUserDir()
+	}
+	found := skills.Discover(ws.Root(), userDir)
 	ag, err := agent.New(agent.Config{
-		SystemPrompt: buildSystemPrompt(ws.Root()),
+		SystemPrompt: buildSystemPrompt(ws.Root(), found),
 		Model:        cfg.Model,
-		Tools:        Tools(ws),
+		Tools:        Tools(ws, skillDirs(found)),
 		Stream:       stream,
 		MaxTurns:     cfg.MaxTurns,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Session{agent: ag, root: ws.Root(), model: cfg.Model}, nil
+	return &Session{agent: ag, root: ws.Root(), model: cfg.Model, skills: found}, nil
+}
+
+func skillDirs(list []skills.Skill) []string {
+	seen := map[string]bool{}
+	dirs := make([]string, 0, len(list))
+	for _, skill := range list {
+		if skill.BaseDir == "" || seen[skill.BaseDir] {
+			continue
+		}
+		seen[skill.BaseDir] = true
+		dirs = append(dirs, skill.BaseDir)
+	}
+	return dirs
 }
 
 func (c Config) applyDefaults() Config {
@@ -99,3 +123,26 @@ func (s *Session) Reset() { s.agent.Reset() }
 
 // Abort cancels the running prompt.
 func (s *Session) Abort() { s.agent.Abort() }
+
+// PrepareSkill turns /skill:name into a user message that already contains SKILL.md.
+// The agent loop stays unaware of skills. The command just sends a normal prompt.
+func (s *Session) PrepareSkill(name, request string) (string, error) {
+	skill, ok := s.lookup(name)
+	if !ok {
+		return "", fmt.Errorf("unknown skill %q", name)
+	}
+	body, err := os.ReadFile(skill.Path)
+	if err != nil {
+		return "", err
+	}
+	return skills.Invocation(skill, string(body), request), nil
+}
+
+func (s *Session) lookup(name string) (skills.Skill, bool) {
+	for _, skill := range s.skills {
+		if skill.Name == name {
+			return skill, true
+		}
+	}
+	return skills.Skill{}, false
+}

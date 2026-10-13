@@ -17,11 +17,11 @@ type readArgs struct {
 	Path string `json:"path"`
 }
 
-func readTool(ws *Workspace) agent.Tool {
+func readTool(ws *Workspace, skillDirs []string) agent.Tool {
 	return agent.Tool{
 		Name:        "read_file",
 		Label:       "read_file",
-		Description: "Read the contents of a text file. Output is truncated. Lines are numbered. path is relative or absolute inside the workspace.",
+		Description: "Read the contents of a text file. Output is truncated. Lines are numbered. path is inside the workspace or a discovered skill directory.",
 		Parameters: ai.ObjectSchema(map[string]ai.Property{
 			"path": ai.StringProperty("Path to the file to read (relative or absolute)"),
 		}, "path"),
@@ -30,19 +30,19 @@ func readTool(ws *Workspace) agent.Tool {
 			if err := decodeArgs(raw, &args); err != nil {
 				return "", err
 			}
-			return readFile(ctx, ws, args.Path)
+			return readFile(ctx, ws, skillDirs, args.Path)
 		},
 	}
 }
 
-func readFile(ctx context.Context, ws *Workspace, path string) (string, error) {
+func readFile(ctx context.Context, ws *Workspace, skillDirs []string, path string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	if err := requirePath(path); err != nil {
 		return "", err
 	}
-	abs, err := ws.Resolve(path)
+	abs, err := readablePath(ws, skillDirs, path)
 	if err != nil {
 		return "", err
 	}
