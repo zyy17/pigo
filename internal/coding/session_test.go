@@ -24,7 +24,12 @@ func TestSessionEditsAFile(t *testing.T) {
 		toolMsg("call_r", "read_file", map[string]any{"path": "hello.txt"}),
 		ai.Assistant("the file now says gamma", ai.StopStop),
 	}}
-	session, err := New(Config{Workspace: dir, Model: "fake", Stream: script.stream})
+	session, err := New(Config{
+		Workspace:     dir,
+		UserSkillsDir: t.TempDir(),
+		Model:         "fake",
+		Stream:        script.stream,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

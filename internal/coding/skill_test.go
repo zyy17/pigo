@@ -74,6 +74,39 @@ func TestSkillPromptAndRead(t *testing.T) {
 	}
 }
 
+func TestSymlinkedSkillDirCanBeRead(t *testing.T) {
+	workspace := t.TempDir()
+	outside := t.TempDir()
+	body := "---\nname: linked-skill\ndescription: From outside\n---\n\nRead me.\n"
+	if err := os.WriteFile(filepath.Join(outside, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	user := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(user, "linked")); err != nil {
+		t.Skip(err)
+	}
+	session, err := New(Config{
+		Workspace:     workspace,
+		UserSkillsDir: user,
+		Model:         "fake",
+		Stream:        (&scripted{}).stream,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(session.skills) != 1 || session.skills[0].Name != "linked-skill" {
+		t.Fatalf("skills %#v", session.skills)
+	}
+	read := toolNamed(t, openAt(t, workspace), skillDirs(session.skills), "read_file")
+	got, err := read.Execute(context.Background(), jsonArg(t, map[string]string{"path": session.skills[0].Path}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Read me.") {
+		t.Fatalf("read %q", got)
+	}
+}
+
 func openAt(t *testing.T, dir string) *Workspace {
 	t.Helper()
 	ws, err := Open(dir)

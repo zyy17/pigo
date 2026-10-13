@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
+
+const maxDescription = 1024
 
 // Skill is one discovered instruction file.
 // DisableModel skills are omitted from the prompt and still run through /skill:name.
@@ -37,44 +40,84 @@ func ProjectDir(workspace string) string {
 //
 // A directory that contains SKILL.md is a skill root: its children are not scanned.
 // Other directories are scanned recursively. Dot directories and node_modules are skipped.
+// A directory symlink is not walked when its target is outside that skills root.
+// Each resolved directory is visited once, so a symlink cycle stops.
 // Pi also applies ignore files; pigo does not, so the walk stays easy to read.
-// A missing directory is not an error.
+// A missing directory is not an error. An empty directory is ignored.
 func Discover(workspace, userDir string) []Skill {
 	var list []Skill
-	seen := map[string]bool{}
-	add(userDir, &list, seen)
-	add(ProjectDir(workspace), &list, seen)
+	names := map[string]bool{}
+	visited := map[string]bool{}
+	add(userDir, &list, names, visited)
+	add(ProjectDir(workspace), &list, names, visited)
 	return list
 }
 
-func add(dir string, list *[]Skill, seen map[string]bool) {
-	for _, skill := range loadDir(dir, true) {
-		if seen[skill.Name] {
+func add(dir string, list *[]Skill, names, visited map[string]bool) {
+	if strings.TrimSpace(dir) == "" {
+		return
+	}
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return
+	}
+	for _, skill := range loadDir(dir, root, true, visited) {
+		if names[skill.Name] {
 			continue
 		}
-		seen[skill.Name] = true
+		names[skill.Name] = true
 		*list = append(*list, skill)
 	}
 }
 
 // loadDir lists one directory. top is true only for the skills root, where a
 // standalone .md file with frontmatter also counts as a skill.
-func loadDir(dir string, top bool) []Skill {
+// root is the resolved skills root being scanned. visited holds resolved paths.
+func loadDir(dir, root string, top bool, visited map[string]bool) []Skill {
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil || visited[real] {
+		return nil
+	}
+	visited[real] = true
+	// A link to a tree outside this root must not be listed. ReadDir on that
+	// target can walk far more than the skills directory. A SKILL.md at the
+	// link itself is still one skill.
+	if !within(root, real) {
+		return oneSkill(filepath.Join(dir, "SKILL.md"))
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
-	for _, entry := range entries {
-		if entry.Name() != "SKILL.md" {
-			continue
-		}
-		skill, ok := loadFile(filepath.Join(dir, entry.Name()))
-		if !ok {
-			return nil
-		}
-		return []Skill{skill}
+	if path, ok := skillMarkdown(dir, entries); ok {
+		return oneSkill(path)
 	}
+	return walkChildren(dir, root, top, entries, visited)
+}
 
+func skillMarkdown(dir string, entries []os.DirEntry) (string, bool) {
+	for _, entry := range entries {
+		if entry.Name() == "SKILL.md" {
+			return filepath.Join(dir, entry.Name()), true
+		}
+	}
+	return "", false
+}
+
+func oneSkill(path string) []Skill {
+	info, err := os.Lstat(path)
+	if err != nil || info.IsDir() {
+		return nil
+	}
+	skill, ok := loadFile(path)
+	if !ok {
+		return nil
+	}
+	return []Skill{skill}
+}
+
+func walkChildren(dir, root string, top bool, entries []os.DirEntry, visited map[string]bool) []Skill {
 	var list []Skill
 	for _, entry := range entries {
 		if skipEntry(entry.Name()) {
@@ -86,7 +129,7 @@ func loadDir(dir string, top bool) []Skill {
 			continue
 		}
 		if info.IsDir() {
-			list = append(list, loadDir(path, false)...)
+			list = append(list, loadDir(path, root, false, visited)...)
 			continue
 		}
 		if top && strings.HasSuffix(entry.Name(), ".md") {
@@ -102,6 +145,17 @@ func skipEntry(name string) bool {
 	return strings.HasPrefix(name, ".") || name == "node_modules"
 }
 
+func within(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func loadFile(path string) (Skill, bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -112,11 +166,11 @@ func loadFile(path string) (Skill, bool) {
 		return Skill{}, false
 	}
 	description := strings.TrimSpace(meta["description"])
-	if description == "" || len(description) > 1024 {
+	if description == "" {
 		return Skill{}, false
 	}
 	abs, err := filepath.Abs(path)
-	if err != nil {
+	if err != nil || !fileInDir(abs) {
 		return Skill{}, false
 	}
 	name := strings.TrimSpace(meta["name"])
@@ -128,11 +182,32 @@ func loadFile(path string) (Skill, bool) {
 	}
 	return Skill{
 		Name:         name,
-		Description:  description,
+		Description:  clipRunes(description, maxDescription),
 		Path:         abs,
 		BaseDir:      filepath.Dir(abs),
 		DisableModel: meta["disable-model-invocation"] == "true",
 	}, true
+}
+
+// fileInDir rejects a SKILL.md symlink whose target leaves the skill directory.
+// Following that link would read a file the skill root does not contain.
+func fileInDir(path string) bool {
+	realFile, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	realDir, err := filepath.EvalSymlinks(filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	return within(realDir, realFile)
+}
+
+func clipRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n])
 }
 
 // Invocation is the user message for /skill:name.

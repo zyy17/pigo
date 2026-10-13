@@ -94,8 +94,9 @@ Discovery follows Pi at a teaching scale:
 - User skills are scanned before project skills. The first name wins, so a user skill overrides a project skill.
 - A directory that contains `SKILL.md` is a skill root. Children are not scanned.
 - Other directories are scanned recursively. Names that start with `.` and `node_modules` are skipped.
+- A directory symlink that points outside the skills root is not walked. When that directory contains `SKILL.md`, it is still one skill. The walk remembers resolved paths, so a symlink cycle stops. A `SKILL.md` that points at a file outside its own directory is skipped.
 - A markdown file placed directly in the skills root is also a skill when it has frontmatter.
-- Frontmatter is a `key: value` block between `---` lines. `name` and `description` are required in effect: a missing description drops the file, and a missing name falls back to the directory name. Names are lowercase letters, digits, and single hyphens, at most 64 characters.
+- Frontmatter is a `key: value` block between `---` lines. A missing description drops the file. A description longer than 1024 characters is shortened to that length. A missing name falls back to the directory name. Names are lowercase letters, digits, and single hyphens, at most 64 characters.
 - `disable-model-invocation: true` omits the skill from the prompt. `/skill:name` can still run it.
 
 The prompt section tells the model to call `read_file` on the skill path. The file body is not copied into the prompt. Relative paths mentioned by the skill are resolved against the skill directory, and that absolute path is what the tool should receive.
