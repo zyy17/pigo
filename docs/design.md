@@ -27,7 +27,8 @@ flowchart TD
 | `internal/agent` | Transcript, the ask/act loop, calling `Tool.Execute` | HTTP, workspaces, skills |
 | `internal/coding` | Workspace, file and shell tools, the system prompt | How SSE is parsed |
 | `internal/skills` | Where `SKILL.md` lives, the short prompt list | The loop and HTTP |
-| `internal/cli` | Flags, environment, Bubble Tea, `/skill:name` | Path checks and the wire format |
+| `internal/config` | Flags, environment, `.env`, YAML config files | The loop, HTTP, and the screen |
+| `internal/cli` | Cobra, Bubble Tea, `/skill:name`, calling `config.Load` | Path checks and the wire format |
 
 A skill never becomes a new agent type. The coding session discovers skills and either mentions them in the system prompt or, for `/skill:name`, pastes the file into an ordinary user message. `Agent.Prompt` still only sees messages and tools.
 
@@ -64,6 +65,12 @@ One pass of `run` is one model call. Text deltas are for the screen. The `done` 
 If that message has tool calls, each call is executed and paired with a `toolResult` that reuses the call ID. The next pass sends both. A call that is canceled or unknown still gets a result. An assistant message with an unpaired tool call would make the next request invalid.
 
 The turn limit is 25 model calls.
+
+## Configuration
+
+`internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it.
+
+Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`), then flags. Blank values are skipped. The CLI is Cobra: `pigo` opens the chat, and `-p` / `--print` runs one prompt.
 
 ## Tools and the workspace
 

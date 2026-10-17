@@ -164,30 +164,6 @@ func TestOneShotCreatesFile(t *testing.T) {
 	}
 }
 
-func TestDotEnv(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "local.env")
-	body := "# comment\nexport OPENAI_MODEL=\"from-file\"\nOPENAI_BASE_URL=http://example.test/v1\nOPENAI_API_KEY='secret'\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OPENAI_MODEL", "already")
-	t.Setenv("OPENAI_BASE_URL", "")
-	t.Setenv("OPENAI_API_KEY", "")
-	if err := loadDotEnv(path); err != nil {
-		t.Fatal(err)
-	}
-	if os.Getenv("OPENAI_MODEL") != "already" {
-		t.Fatalf("model overridden: %s", os.Getenv("OPENAI_MODEL"))
-	}
-	if os.Getenv("OPENAI_BASE_URL") != "http://example.test/v1" {
-		t.Fatalf("base url %s", os.Getenv("OPENAI_BASE_URL"))
-	}
-	if os.Getenv("OPENAI_API_KEY") != "secret" {
-		t.Fatalf("api key %q", os.Getenv("OPENAI_API_KEY"))
-	}
-}
-
 func sse(v any) string {
 	b, err := json.Marshal(v)
 	if err != nil {

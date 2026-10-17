@@ -5,54 +5,96 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
+	"github.com/zyy17/pigo/internal/config"
 )
 
-// Run parses args and starts a session. It reads .env from the current directory.
+const version = "0.1.0"
+
+const longHelp = `pigo is a small coding agent.
+
+Inside the session:
+  /skill:name       load that skill, then an optional request
+  /reset            clear the transcript
+  /exit             quit
+
+Environment:
+  PIGO_PROVIDER     chat backend (default openai)
+  OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
+  OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
+  OPENAI_MODEL      model name that endpoint accepts (default gpt-4o-mini)
+
+Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
+Precedence is flags, then the environment, then .env, then those files, then defaults.
+`
+
+// Run parses args and starts a session.
 func Run(args []string) error {
 	return run(args, os.Stdin, os.Stdout)
 }
 
 func run(args []string, in io.Reader, out io.Writer) error {
-	if err := loadDotEnv(".env"); err != nil {
-		return err
+	cmd := newCommand(in, out)
+	cmd.SetArgs(args)
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	return cmd.Execute()
+}
+
+func newCommand(in io.Reader, out io.Writer) *cobra.Command {
+	var flags config.Config
+	cmd := &cobra.Command{
+		Use:           "pigo",
+		Short:         "a small coding agent",
+		Long:          longHelp,
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return start(flags, in, out)
+		},
 	}
-	opts, err := parseArgs(args, out)
-	if errors.Is(err, errHelp) {
-		return nil
-	}
+	cmd.Flags().StringVarP(&flags.Prompt, "print", "p", "", "run one prompt and exit")
+	cmd.Flags().StringVarP(&flags.Workspace, "workspace", "w", "", "workspace directory (default: current directory)")
+	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or gpt-4o-mini)")
+	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
+	return cmd
+}
+
+func start(flags config.Config, in io.Reader, out io.Writer) error {
+	cfg, err := config.Load(flags)
 	if err != nil {
 		return err
 	}
-	ep, err := endpointFromEnv(opts.baseURL, opts.model)
-	if err != nil {
+	if err := checkProvider(cfg); err != nil {
 		return err
 	}
 	session, err := coding.New(coding.Config{
-		APIKey:    ep.apiKey,
-		BaseURL:   ep.baseURL,
-		Model:     ep.model,
-		Workspace: firstNonEmpty(opts.workspace, "."),
+		APIKey:    cfg.APIKey,
+		BaseURL:   cfg.BaseURL,
+		Model:     cfg.Model,
+		Workspace: cfg.Workspace,
 	})
 	if err != nil {
 		return err
 	}
 	app := &app{session: session, in: in, out: out}
-	if opts.prompt != "" {
+	if cfg.Prompt != "" {
 		session.Subscribe(func(ev agent.Event) { render(out, ev) })
 		stop := app.watchSignals()
 		defer stop()
-		return app.runLine(opts.prompt)
+		return app.runLine(cfg.Prompt)
 	}
 	if interactiveTerminal(in, out) {
 		return runTUI(session)
@@ -68,62 +110,6 @@ func interactiveTerminal(in io.Reader, out io.Writer) bool {
 		return false
 	}
 	return term.IsTerminal(int(inFile.Fd())) && term.IsTerminal(int(outFile.Fd()))
-}
-
-type options struct {
-	prompt    string
-	workspace string
-	model     string
-	baseURL   string
-}
-
-func parseArgs(args []string, out io.Writer) (options, error) {
-	fs := flag.NewFlagSet("pigo", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	var opts options
-	fs.StringVar(&opts.prompt, "p", "", "run one prompt and exit")
-	fs.StringVar(&opts.workspace, "w", "", "workspace directory (default: current directory)")
-	fs.StringVar(&opts.model, "model", "", "model name (default: OPENAI_MODEL or gpt-4o-mini)")
-	fs.StringVar(&opts.baseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
-	fs.Usage = func() { writeUsage(out, fs) }
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return options{}, errHelp
-		}
-		return options{}, err
-	}
-	if fs.NArg() > 0 {
-		return options{}, fmt.Errorf("unexpected argument %q", fs.Arg(0))
-	}
-	opts.prompt = strings.TrimSpace(opts.prompt)
-	return opts, nil
-}
-
-// errHelp tells Run to exit successfully after printing usage.
-var errHelp = errors.New("help")
-
-func writeUsage(out io.Writer, fs *flag.FlagSet) {
-	fmt.Fprintf(out, `pigo is a small coding agent.
-
-Usage:
-  pigo              chat in the current directory
-  pigo -p "task"    run one task and exit
-  pigo -w DIR       use DIR as the workspace
-
-Inside the session:
-  /skill:name       load that skill, then an optional request
-  /reset            clear the transcript
-  /exit             quit
-
-Environment:
-  PIGO_PROVIDER     chat backend (default openai)
-  OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
-  OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
-  OPENAI_MODEL      model name that endpoint accepts (default gpt-4o-mini)
-
-`)
-	fs.SetOutput(out)
-	fs.PrintDefaults()
 }
 
 type app struct {
@@ -197,13 +183,4 @@ func (a *app) prompt(text string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	return a.session.Prompt(ctx, text)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
 }

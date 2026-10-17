@@ -1,37 +1,6 @@
-package cli
+package config
 
-import (
-	"bufio"
-	"errors"
-	"os"
-	"strings"
-)
-
-// loadDotEnv sets unset variables from path. A missing file is fine.
-func loadDotEnv(path string) error {
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		key, val, ok := parseEnvLine(sc.Text())
-		if !ok {
-			continue
-		}
-		if os.Getenv(key) == "" {
-			if err := os.Setenv(key, val); err != nil {
-				return err
-			}
-		}
-	}
-	return sc.Err()
-}
+import "strings"
 
 func parseEnvLine(line string) (string, string, bool) {
 	line = strings.TrimSpace(line)

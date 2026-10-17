@@ -27,7 +27,8 @@ flowchart TD
 | `internal/agent` | 会话记录、询问再行动的循环、调用 `Tool.Execute` | HTTP、工作区、技能 |
 | `internal/coding` | 工作区、文件和 shell 工具、系统提示 | SSE 如何解析 |
 | `internal/skills` | `SKILL.md` 在哪里、提示词里的简短列表 | 循环和 HTTP |
-| `internal/cli` | 标志、环境变量、Bubble Tea、`/skill:name` | 路径检查和线路格式 |
+| `internal/config` | 命令行参数、环境变量、`.env`、YAML 配置文件 | 循环、HTTP 和画面 |
+| `internal/cli` | Cobra、Bubble Tea、`/skill:name`、调用 `config.Load` | 路径检查和线路格式 |
 
 技能不会变成一种新的代理。编码会话发现技能后，要么把它们写进系统提示，要么在 `/skill:name` 时把文件贴进一条普通用户消息。`Agent.Prompt` 看到的仍然只是消息和工具。
 
@@ -64,6 +65,12 @@ sequenceDiagram
 如果这条消息带有工具调用，每次调用都会执行，并配上一条复用该调用 ID 的 `toolResult`。下一圈会把两者一起发出去。被取消或未知的调用也会得到一条结果。助手消息里若有未配对的工具调用，下一次请求就会无效。
 
 轮数上限是 25 次模型调用。
+
+## 配置
+
+只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。
+
+从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`），然后是命令行参数。空值会被跳过。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示。
 
 ## 工具和工作区
 

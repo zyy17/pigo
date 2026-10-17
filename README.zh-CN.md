@@ -136,7 +136,17 @@ go run . -p "List the files here"
 | `OPENAI_BASE_URL` | 该提供者的 API 根，通常以 `/v1` 结尾 | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-4o-mini` |
 
-`-base-url`、`-model` 和 `-w` 覆盖环境变量。API 密钥只放在环境里，避免进 shell 历史。当前目录的 `.env` 只填补尚未设置的变量。
+`--print`（`-p`）、`--base-url`、`--model` 和 `--workspace`（`-w`）覆盖环境变量。API 密钥不做成命令行参数，避免进 shell 历史。
+
+配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。
+
+```yaml
+provider: openai
+api_key: sk-...
+base_url: https://api.openai.com/v1
+model: gpt-4o-mini
+workspace: .
+```
 
 单次运行打印的流和聊天画面相同：
 

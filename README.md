@@ -136,7 +136,17 @@ go run . -p "List the files here"
 | `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-4o-mini` |
 
-Flags `-base-url`, `-model`, and `-w` override the environment. The API key stays in the environment so it does not land in shell history. A `.env` file in the current directory fills in variables that are not already set.
+Flags `--print` (`-p`), `--base-url`, `--model`, and `--workspace` (`-w`) override the environment. The API key stays out of the flags so it does not land in shell history.
+
+Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, and `workspace`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags.
+
+```yaml
+provider: openai
+api_key: sk-...
+base_url: https://api.openai.com/v1
+model: gpt-4o-mini
+workspace: .
+```
 
 A one-shot run prints the same stream the chat shows:
 
