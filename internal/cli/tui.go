@@ -5,14 +5,19 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 	"github.com/zyy17/pigo/internal/coding"
 )
+
+const inputLines = 3
 
 type lineKind int
 
@@ -31,7 +36,10 @@ type chatLine struct {
 
 type chatModel struct {
 	session   *coding.Session
-	input     textinput.Model
+	modelName string
+	root      string
+	input     textarea.Model
+	spin      spinner.Model
 	view      viewport.Model
 	events    chan agent.Event
 	lines     []chatLine
@@ -57,24 +65,35 @@ func runTUI(session *coding.Session) error {
 }
 
 func newChat(session *coding.Session, events chan agent.Event) chatModel {
-	input := textinput.New()
-	input.Prompt = "you> "
-	input.Placeholder = "Write a function, edit a file, or ask a question"
-	input.CharLimit = 8000
+	input := textarea.New()
+	input.Placeholder = "Ask for a coding task"
+	input.ShowLineNumbers = false
+	input.Prompt = ""
+	input.CharLimit = 0
+	input.SetHeight(inputLines)
+	// Enter sends the box. A newline is an explicit chord so a task can span lines.
+	input.KeyMap.InsertNewline = key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"))
 	input.Focus()
-	return chatModel{
+
+	m := chatModel{
 		session: session,
 		input:   input,
+		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(cyanStyle)),
 		events:  events,
 		lines: []chatLine{{
 			kind: kindInfo,
-			text: "Ask for a small coding task. /skill:name loads a skill. /reset clears the chat. /exit quits.",
+			text: "/skill:name loads a skill. /reset clears the chat. /exit quits.",
 		}},
 	}
+	if session != nil {
+		m.modelName = session.Model()
+		m.root = session.Root()
+	}
+	return m
 }
 
 func (m chatModel) Init() tea.Cmd {
-	return textinput.Blink
+	return textarea.Blink
 }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -82,6 +101,13 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width, msg.Height)
 		return m, nil
+	case spinner.TickMsg:
+		if !m.busy {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case streamMsg:
 		m.apply(msg.event)
 		if m.busy {
@@ -103,7 +129,14 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *chatModel) resize(width, height int) {
 	m.width = width
 	m.height = height
-	body := height - 3
+	frame := inputStyle.Width(width)
+	inner := width - frame.GetHorizontalFrameSize()
+	if inner < 1 {
+		inner = 1
+	}
+	m.input.SetWidth(inner)
+	m.input.SetHeight(inputLines)
+	body := height - lipgloss.Height(m.header()) - lipgloss.Height(m.footer()) - inputLines - frame.GetVerticalFrameSize()
 	if body < 1 {
 		body = 1
 	}
@@ -113,10 +146,6 @@ func (m *chatModel) resize(width, height int) {
 	} else {
 		m.view.Width = width
 		m.view.Height = body
-	}
-	m.input.Width = width - len(m.input.Prompt)
-	if m.input.Width < 1 {
-		m.input.Width = 1
 	}
 	m.refresh()
 }
@@ -139,7 +168,7 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.view.HalfPageDown()
 		}
 		return m, nil
-	case "enter":
+	case "enter", "ctrl+m":
 		if m.busy {
 			return m, nil
 		}
@@ -175,7 +204,7 @@ func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
 	m.streaming = false
 	m.add(kindUser, text)
 	m.input.SetValue("")
-	return m, tea.Batch(listen(m.events), m.runPrompt(expanded))
+	return m, tea.Batch(listen(m.events), m.runPrompt(expanded), m.spin.Tick)
 }
 
 func (m chatModel) runPrompt(text string) tea.Cmd {

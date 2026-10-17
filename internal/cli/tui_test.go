@@ -8,12 +8,48 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 	"github.com/zyy17/pigo/internal/coding"
 )
+
+func TestChatLayout(t *testing.T) {
+	dir := t.TempDir()
+	session, err := coding.New(coding.Config{
+		Workspace:     dir,
+		UserSkillsDir: t.TempDir(),
+		APIKey:        "test",
+		Model:         "test-model",
+		Stream: func(ctx context.Context, req ai.Request) (<-chan ai.Event, error) {
+			return nil, context.Canceled
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newChat(session, nil)
+	m.resize(80, 24)
+	got := m.View()
+	if h := lipgloss.Height(got); h > 24 {
+		t.Fatalf("view is %d lines, taller than the terminal", h)
+	}
+	for _, want := range []string{"pigo", "0.1.0", "test-model", "enter send", "ctrl-c abort", "/exit"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("layout missing %q:\n%s", want, got)
+		}
+	}
+	m.apply(agent.Event{Type: agent.MessageUpdate, TextDelta: "# Title\nuse `code` and **bold**"})
+	text := renderTranscript(m.lines)
+	for _, want := range []string{"Title", "code", "bold"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("markdown missing %q:\n%s", want, text)
+		}
+	}
+}
 
 func TestChatShowsToolsAndText(t *testing.T) {
 	m := newChat(nil, nil)
@@ -121,6 +157,10 @@ func runCmds(t *testing.T, m chatModel, cmd tea.Cmd) chatModel {
 		next, follow := m.Update(got)
 		m = next.(chatModel)
 		for follow != nil && m.busy {
+			// A spinner tick waits on a timer and would keep this loop alive.
+			if _, ok := got.(spinner.TickMsg); ok {
+				break
+			}
 			got = follow()
 			if got == nil {
 				break

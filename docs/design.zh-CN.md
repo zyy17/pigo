@@ -72,6 +72,8 @@ sequenceDiagram
 
 从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`），然后是命令行参数。空值会被跳过。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示。
 
+聊天画面留在 `internal/cli`。它显示字标、会话记录和带边框的输入框。`Agent.Prompt` 收到的仍然只是文本。
+
 ## 工具和工作区
 
 `Workspace.Resolve` 把路径从工作区根目录变成绝对路径，跟随符号链接，并拒绝根目录之外的目标。检查用的是解析之后的路径，所以项目内部的链接不能指向外面的文件。

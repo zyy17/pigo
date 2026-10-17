@@ -103,7 +103,7 @@ make build
 ./pigo
 ```
 
-在终端里会打开聊天画面。输入任务并回车，回复会流式出现。工具调用各自占一行。`/skill:name` 装入技能，`/reset` 清空会话，`/exit` 退出，Ctrl-C 取消正在进行的任务。Page Up 和 Page Down 滚动记录。
+在终端里会打开聊天画面。上方是 pigo 字标。记录里能分清你的输入、流式回复，以及较淡的工具行。在底部的输入框里打字。Enter 发送，Alt+Enter 换行，Ctrl-C 取消正在进行的任务，Page Up 和 Page Down 滚动。`/skill:name` 装入技能，`/reset` 清空会话，`/exit` 退出。
 
 标准输入不是终端时，同样的命令走逐行会话。管道和测试用的就是这条路径。
 
