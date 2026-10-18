@@ -28,7 +28,7 @@ Reuse Pi coding-agent system prompt sections where we already do. Do not invent 
 - Idiomatic Go: community naming, short functions, flat structs. Avoid deep nesting.
 - Teachability first: a reader should follow one turn without jumping through many indirections.
 - Comments only on key paths and critical sections (workspace confinement, request encoding, tool-result pairing, skill discovery safety). No narrating comments.
-- Non-test Go stays **≤ 3500 lines**. If a feature would blow the budget, shrink the feature or refuse it.
+- Prefer the smallest clear code. Keep functions short and the tree easy to read at a glance. Do not pad or invent scope. Line count is a soft preference for simplicity, not a hard cap.
 - Pass `go test ./...` and `golangci-lint run ./...` (see `.golangci.yml` / `make lint`) before you claim done.
 - Prefer existing patterns in the tree over new abstractions.
 
@@ -68,4 +68,4 @@ Full Pi TUI feature set, native per-vendor APIs, skills marketplace, session fil
 
 ## When unsure
 
-Answer the question first. Prefer the smallest change that keeps Pi alignment and the line budget. If a request fights teaching readability or the layer table above, say so and propose a smaller cut.
+Answer the question first. Prefer the smallest change that keeps Pi alignment and the code easy to read. If a request fights teaching readability or the layer table above, say so and propose a smaller cut.
