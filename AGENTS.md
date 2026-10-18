@@ -57,7 +57,6 @@ Reuse Pi coding-agent system prompt sections where we already do. Do not invent 
 
 ## Git and shipping
 
-- Push **directly to `main`**. Do not open PRs unless the user asks.
 - Atomic Conventional Commits (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`), clean messages, no emoji.
 - Self-test before push: `go test ./...`, `golangci-lint run ./...`, and a quick sanity check of the surface you touched.
 - Do not commit secrets, `.env`, or API keys.
