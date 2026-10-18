@@ -224,8 +224,7 @@ func (m *chatModel) finishMessage(msg ai.Message) tea.Cmd {
 	if msg.Role != ai.RoleAssistant {
 		return nil
 	}
-	text := m.live
-	m.live = ""
+	text := m.takeLive()
 	if strings.TrimSpace(text) == "" {
 		text = msg.Text
 	}
@@ -233,31 +232,40 @@ func (m *chatModel) finishMessage(msg ai.Message) tea.Cmd {
 }
 
 func (m *chatModel) flushLive() tea.Cmd {
+	return m.addBlock(kindAssistant, m.takeLive())
+}
+
+func (m *chatModel) takeLive() string {
 	text := m.live
 	m.live = ""
-	return m.addBlock(kindAssistant, text)
+	return text
 }
 
 func (m *chatModel) noteEnd(err error) tea.Cmd {
 	flush := m.flushLive()
-	var extra tea.Cmd
-	if err == nil && !m.started.IsZero() {
-		secs := int(time.Since(m.started).Round(time.Second) / time.Second)
-		m.started = time.Time{}
-		if secs >= 1 {
-			extra = m.addBlock(kindInfo, "Worked for "+strconv.Itoa(secs)+"s")
-		}
-	}
-	if err == nil {
+	switch {
+	case err == nil:
 		m.status = "ready"
-		return tea.Batch(flush, extra)
-	}
-	if errors.Is(err, agent.ErrInterrupted) {
+		return tea.Batch(flush, m.workedFor())
+	case errors.Is(err, agent.ErrInterrupted):
 		m.status = "interrupted"
 		return tea.Batch(flush, m.addBlock(kindInfo, "interrupted"))
+	default:
+		m.status = "error"
+		return tea.Batch(flush, m.addBlock(kindError, err.Error()))
 	}
-	m.status = "error"
-	return tea.Batch(flush, m.addBlock(kindError, err.Error()))
+}
+
+func (m *chatModel) workedFor() tea.Cmd {
+	if m.started.IsZero() {
+		return nil
+	}
+	secs := int(time.Since(m.started).Round(time.Second) / time.Second)
+	m.started = time.Time{}
+	if secs < 1 {
+		return nil
+	}
+	return m.addBlock(kindInfo, "Worked for "+strconv.Itoa(secs)+"s")
 }
 
 func (m *chatModel) addBlock(kind blockKind, text string) tea.Cmd {

@@ -185,16 +185,7 @@ func (m chatModel) inputBlock() (view string, x, y int) {
 		slots = 1
 		pad = false
 	}
-	start := 0
-	if len(rows) > slots {
-		start = caretLine - slots + 1
-		if start < 0 {
-			start = 0
-		}
-		if start+slots > len(rows) {
-			start = len(rows) - slots
-		}
-	}
+	start := windowStart(len(rows), slots, caretLine)
 	var b strings.Builder
 	y = 0
 	if pad {
@@ -272,6 +263,21 @@ func (m chatModel) inputRows() int {
 		return maxRows
 	}
 	return room
+}
+
+// windowStart is the first wrapped row still visible, keeping the caret row on screen.
+func windowStart(n, slots, caret int) int {
+	if slots < 1 || n <= slots {
+		return 0
+	}
+	start := caret - slots + 1
+	if start < 0 {
+		start = 0
+	}
+	if start+slots > n {
+		return n - slots
+	}
+	return start
 }
 
 func caretColumn(prefix string, line []rune, col int) int {

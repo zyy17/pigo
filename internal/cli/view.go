@@ -293,15 +293,8 @@ func (m chatModel) paintTool(text string) string {
 }
 
 func (m chatModel) paintUser(text string) string {
-	width := m.width
-	if width < 1 {
-		width = 1
-	}
-	inner := width - 2
-	if inner < 1 {
-		inner = 1
-	}
-	lines := strings.Split(wrapText(text, inner), "\n")
+	width := paneCols(m.width)
+	lines := strings.Split(wrapText(text, textCols(width)), "\n")
 	var b strings.Builder
 	// Blank rows match the composer, so the sent message looks like the
 	// gray block that just left the input.
@@ -320,15 +313,8 @@ func (m chatModel) paintUser(text string) string {
 }
 
 func (m chatModel) paintAssistant(text string) string {
-	width := m.width
-	if width < 1 {
-		width = 1
-	}
-	inner := width - 2
-	if inner < 1 {
-		inner = 1
-	}
-	lines := strings.Split(styleProse(wrapText(text, inner)), "\n")
+	width := paneCols(m.width)
+	lines := strings.Split(styleProse(wrapText(text, textCols(width))), "\n")
 	for i, line := range lines {
 		if i == 0 {
 			lines[i] = bulletStyle.Render("•") + " " + line
@@ -337,6 +323,21 @@ func (m chatModel) paintAssistant(text string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func paneCols(width int) int {
+	if width < 1 {
+		return 1
+	}
+	return width
+}
+
+// textCols is the width inside the "> " / "• " gutter.
+func textCols(width int) int {
+	if width < 3 {
+		return 1
+	}
+	return width - 2
 }
 
 func (m chatModel) paintLines(text string, style lipgloss.Style) string {
