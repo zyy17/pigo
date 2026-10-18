@@ -2,7 +2,7 @@
 
 # pigo
 
-[中文](README.zh-CN.md) · [Design](docs/design.md)
+[中文](README.zh-CN.md) · [Design](docs/design.md) · [AGENTS.md](AGENTS.md)
 
 pigo is a small Go coding agent. It chats with an OpenAI-compatible model, runs tools, and repeats until the model stops. The layout follows [Pi](https://github.com/earendil-works/pi): model transport, agent loop, and coding session stay in separate packages.
 

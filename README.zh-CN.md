@@ -2,7 +2,7 @@
 
 # pigo
 
-[English](README.md) · [设计说明](docs/design.zh-CN.md)
+[English](README.md) · [设计说明](docs/design.zh-CN.md) · [AGENTS.md](AGENTS.md)
 
 pigo 是一个小型 Go 编码代理。它和一个兼容 OpenAI 的模型对话，调用工具，然后重复，直到模型停止。目录划分跟随 [Pi](https://github.com/earendil-works/pi)：模型传输、代理循环、编码会话各自独立。
 
