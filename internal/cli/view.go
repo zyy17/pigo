@@ -22,63 +22,117 @@ var (
 )
 
 func (m chatModel) View() string {
-	if !m.ready {
-		return "starting…"
+	// An empty view lets Bubble Tea erase the input and footer on quit.
+	// Finished lines were already printed into the scrollback.
+	if !m.ready || m.quitting {
+		return ""
 	}
-	return lipgloss.JoinVertical(lipgloss.Left,
-		m.header(),
-		m.view.View(),
-		m.inputBox(),
-		m.footer(),
-	)
+	m.fitInput()
+	parts := make([]string, 0, 3)
+	if live := m.liveView(); live != "" {
+		parts = append(parts, live)
+	}
+	parts = append(parts, m.inputBox(), m.footer())
+	return fitHeight(lipgloss.JoinVertical(lipgloss.Left, parts...), m.height)
+}
+
+func (m chatModel) liveView() string {
+	if m.live == "" {
+		return ""
+	}
+	text := m.live
+	if m.width > 0 {
+		text = wrapPlain(text, m.width)
+	}
+	lines := strings.Split(renderAssistant(text), "\n")
+	limit := m.liveLimit()
+	if len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m chatModel) liveLimit() int {
+	rest := m.height - lipgloss.Height(m.inputBox()) - lipgloss.Height(m.footer())
+	if rest < 1 {
+		return 1
+	}
+	return rest
 }
 
 func (m chatModel) inputBox() string {
-	return inputStyle.Width(m.width).Render(m.input.View())
+	return inputStyle.Width(m.boxWidth()).Render(m.input.View())
 }
 
 func (m chatModel) footer() string {
+	width := m.width
+	if width <= 0 {
+		width = 80
+	}
 	state := "ready"
-	mark := ""
+	lead := ""
 	if m.busy {
 		state = "working"
-		mark = m.spin.View() + " "
+		lead = m.spin.View() + " "
 	}
-	hint := state + "  ·  " + m.modelName + "  ·  " + flattenLine(m.root, 32) +
-		"  ·  enter send  ·  alt+enter newline  ·  ctrl-c abort  ·  /exit"
-	return mark + dimStyle.Render(hint)
-}
-
-func renderTranscript(lines []chatLine) string {
-	var b strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-			if line.kind == kindUser {
-				b.WriteByte('\n')
-			}
+	leadW := lipgloss.Width(lead)
+	inner := width - leadW
+	if inner < 8 {
+		inner = width
+		lead = ""
+	}
+	root := flattenLine(m.root, 32)
+	status := wrapPlain(state+" · "+m.modelName+" · "+root, inner)
+	keys := wrapPlain("enter send · alt+enter newline · ctrl-c abort · /exit", width)
+	one := state + " · " + m.modelName + " · " + root + " · " + "enter send · alt+enter newline · ctrl-c abort · /exit"
+	if lipgloss.Width(one)+leadW <= width {
+		line := dimStyle.Render(one)
+		if lead == "" {
+			return line
 		}
-		b.WriteString(styleLine(line))
+		return lead + line
 	}
-	if len(lines) > 0 {
-		b.WriteByte('\n')
+	lines := strings.Split(dimStyle.Render(status+"\n"+keys), "\n")
+	if lead != "" && len(lines) > 0 {
+		lines[0] = lead + lines[0]
 	}
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
-func styleLine(line chatLine) string {
-	switch line.kind {
-	case kindUser:
-		return userStyle.Render("you> " + line.text)
-	case kindTool:
-		return toolStyle.Render(line.text)
-	case kindError:
-		return errStyle.Render(line.text)
-	case kindInfo:
-		return dimStyle.Render(line.text)
-	default:
-		return renderAssistant(line.text)
+func fitHeight(s string, height int) string {
+	if height <= 0 || s == "" {
+		return s
 	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= height {
+		return s
+	}
+	return strings.Join(lines[len(lines)-height:], "\n")
+}
+
+func wrapPlain(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		out = append(out, wrapLine(line, width)...)
+	}
+	return strings.Join(out, "\n")
+}
+
+func wrapLine(line string, width int) []string {
+	r := []rune(line)
+	if len(r) == 0 {
+		return []string{""}
+	}
+	var out []string
+	for len(r) > width {
+		out = append(out, string(r[:width]))
+		r = r[width:]
+	}
+	out = append(out, string(r))
+	return out
 }
 
 func renderAssistant(text string) string {
