@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -19,47 +18,34 @@ import (
 
 const inputLines = 3
 
-type lineKind int
-
-const (
-	kindInfo lineKind = iota
-	kindUser
-	kindAssistant
-	kindTool
-	kindError
-)
-
-type chatLine struct {
-	kind lineKind
-	text string
-}
-
 type chatModel struct {
 	session   *coding.Session
 	modelName string
 	root      string
 	input     textarea.Model
 	spin      spinner.Model
-	view      viewport.Model
 	events    chan agent.Event
-	lines     []chatLine
+	printed   []string
+	live      string
 	width     int
 	height    int
 	ready     bool
 	busy      bool
-	streaming bool
+	quitting  bool
 }
 
 type streamMsg struct {
 	event agent.Event
 }
 
+// runTUI uses the normal screen. Finished lines go to the terminal scrollback.
+// View redraws only the streaming reply, the input, and the footer.
 func runTUI(session *coding.Session) error {
 	events := make(chan agent.Event, 256)
 	session.Subscribe(func(ev agent.Event) {
 		events <- ev
 	})
-	program := tea.NewProgram(newChat(session, events), tea.WithAltScreen())
+	program := tea.NewProgram(newChat(session, events))
 	_, err := program.Run()
 	return err
 }
@@ -80,10 +66,6 @@ func newChat(session *coding.Session, events chan agent.Event) chatModel {
 		input:   input,
 		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(cyanStyle)),
 		events:  events,
-		lines: []chatLine{{
-			kind: kindInfo,
-			text: "/skill:name loads a skill. /reset clears the chat. /exit quits.",
-		}},
 	}
 	if session != nil {
 		m.modelName = session.Model()
@@ -99,8 +81,8 @@ func (m chatModel) Init() tea.Cmd {
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.resize(msg.Width, msg.Height)
-		return m, nil
+		cmd := m.resize(msg.Width, msg.Height)
+		return m, cmd
 	case spinner.TickMsg:
 		if !m.busy {
 			return m, nil
@@ -109,11 +91,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
 	case streamMsg:
-		m.apply(msg.event)
+		cmd := m.apply(msg.event)
 		if m.busy {
-			return m, listen(m.events)
+			return m, tea.Batch(listen(m.events), cmd)
 		}
-		return m, nil
+		return m, cmd
 	case tea.KeyMsg:
 		return m.onKey(msg)
 	}
@@ -126,48 +108,68 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *chatModel) resize(width, height int) {
+func (m *chatModel) resize(width, height int) tea.Cmd {
 	m.width = width
 	m.height = height
-	frame := inputStyle.Width(width)
-	inner := width - frame.GetHorizontalFrameSize()
+	m.fitInput()
+	if m.ready {
+		return nil
+	}
+	m.ready = true
+	return m.commitRaw(m.opening())
+}
+
+func (m *chatModel) fitInput() {
+	pad := inputStyle.GetHorizontalPadding()
+	inner := m.boxWidth() - pad
 	if inner < 1 {
 		inner = 1
 	}
 	m.input.SetWidth(inner)
-	m.input.SetHeight(inputLines)
-	body := height - lipgloss.Height(m.header()) - lipgloss.Height(m.footer()) - inputLines - frame.GetVerticalFrameSize()
-	if body < 1 {
-		body = 1
+	m.input.SetHeight(m.inputLineCount())
+}
+
+// boxWidth is the input style width. The border sits outside that width,
+// so the style itself is narrower than the terminal by the border.
+func (m chatModel) boxWidth() int {
+	width := m.width
+	if width < 1 {
+		width = 1
 	}
-	if !m.ready {
-		m.view = viewport.New(width, body)
-		m.ready = true
-	} else {
-		m.view.Width = width
-		m.view.Height = body
+	inner := width - inputStyle.GetHorizontalBorderSize()
+	if inner < 1 {
+		return 1
 	}
-	m.refresh()
+	return inner
+}
+
+func (m chatModel) inputLineCount() int {
+	const border = 2
+	const foot = 2
+	room := m.height - border - foot
+	if m.live != "" && room > 1 {
+		room--
+	}
+	if room < 1 {
+		room = 1
+	}
+	if room > inputLines {
+		return inputLines
+	}
+	return room
 }
 
 func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		if m.busy {
-			m.session.Abort()
+			if m.session != nil {
+				m.session.Abort()
+			}
 			return m, nil
 		}
+		m.quitting = true
 		return m, tea.Quit
-	case "pgup":
-		if m.ready {
-			m.view.HalfPageUp()
-		}
-		return m, nil
-	case "pgdown":
-		if m.ready {
-			m.view.HalfPageDown()
-		}
-		return m, nil
 	case "enter", "ctrl+m":
 		if m.busy {
 			return m, nil
@@ -187,24 +189,32 @@ func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
 	case "":
 		return m, nil
 	case "/exit", "exit", "quit", "/quit":
+		m.quitting = true
 		return m, tea.Quit
 	case "/reset":
-		m.session.Reset()
-		m.add(kindInfo, "transcript cleared")
+		if m.session != nil {
+			m.session.Reset()
+		}
+		m.live = ""
+		m.fitInput()
 		m.input.SetValue("")
-		return m, nil
+		return m, m.commitPlain("— transcript cleared —", dimStyle)
 	}
 	expanded, err := commandText(m.session, text)
 	if err != nil {
-		m.add(kindError, err.Error())
 		m.input.SetValue("")
-		return m, nil
+		return m, m.commitPlain(err.Error(), errStyle)
 	}
 	m.busy = true
-	m.streaming = false
-	m.add(kindUser, text)
+	m.live = ""
+	m.fitInput()
 	m.input.SetValue("")
-	return m, tea.Batch(listen(m.events), m.runPrompt(expanded), m.spin.Tick)
+	return m, tea.Batch(
+		m.commitPlain("you> "+text, userStyle),
+		listen(m.events),
+		m.runPrompt(expanded),
+		m.spin.Tick,
+	)
 }
 
 func (m chatModel) runPrompt(text string) tea.Cmd {
@@ -224,68 +234,100 @@ func listen(events <-chan agent.Event) tea.Cmd {
 	}
 }
 
-func (m *chatModel) apply(ev agent.Event) {
+func (m *chatModel) apply(ev agent.Event) tea.Cmd {
 	switch ev.Type {
 	case agent.MessageUpdate:
-		m.appendDelta(ev.TextDelta)
-	case agent.MessageEnd:
-		m.finishMessage(ev.Message)
-	case agent.ToolStart:
-		m.streaming = false
-		m.add(kindTool, "→ "+ev.ToolName+" "+flattenLine(string(ev.Args), 160))
-	case agent.ToolEnd:
-		mark := "←"
-		if ev.IsError {
-			mark = "✗"
+		if ev.TextDelta == "" {
+			return nil
 		}
-		m.add(kindTool, mark+" "+flattenLine(ev.Result, 240))
+		m.live += ev.TextDelta
+		m.fitInput()
+		return nil
+	case agent.MessageEnd:
+		return m.finishMessage(ev.Message)
+	case agent.ToolStart:
+		return tea.Batch(m.flushLive(), m.commitPlain(toolStartText(ev), toolStyle))
+	case agent.ToolEnd:
+		return m.commitPlain(toolEndText(ev), toolStyle)
 	case agent.AgentEnd:
 		m.busy = false
-		m.streaming = false
-		m.noteEnd(ev.Err)
+		return m.noteEnd(ev.Err)
+	default:
+		return nil
 	}
 }
 
-func (m *chatModel) appendDelta(delta string) {
-	if delta == "" {
-		return
+func (m *chatModel) finishMessage(msg ai.Message) tea.Cmd {
+	if msg.Role != ai.RoleAssistant {
+		return nil
 	}
-	if m.streaming && len(m.lines) > 0 && m.lines[len(m.lines)-1].kind == kindAssistant {
-		m.lines[len(m.lines)-1].text += delta
-		m.refresh()
-		return
+	text := m.live
+	m.live = ""
+	m.fitInput()
+	if strings.TrimSpace(text) == "" {
+		text = msg.Text
 	}
-	m.streaming = true
-	m.add(kindAssistant, delta)
+	return m.commitAssistant(text)
 }
 
-func (m *chatModel) finishMessage(msg ai.Message) {
-	if msg.Role == ai.RoleAssistant && msg.Text != "" && !m.streaming {
-		m.add(kindAssistant, msg.Text)
-	}
-	m.streaming = false
+func (m *chatModel) flushLive() tea.Cmd {
+	text := m.live
+	m.live = ""
+	m.fitInput()
+	return m.commitAssistant(text)
 }
 
-func (m *chatModel) noteEnd(err error) {
+func (m *chatModel) noteEnd(err error) tea.Cmd {
+	flush := m.flushLive()
 	if err == nil {
-		return
+		return flush
 	}
 	if errors.Is(err, agent.ErrInterrupted) {
-		m.add(kindInfo, "interrupted")
-		return
+		return tea.Batch(flush, m.commitPlain("interrupted", dimStyle))
 	}
-	m.add(kindError, err.Error())
+	return tea.Batch(flush, m.commitPlain(err.Error(), errStyle))
 }
 
-func (m *chatModel) add(kind lineKind, text string) {
-	m.lines = append(m.lines, chatLine{kind: kind, text: text})
-	m.refresh()
+func toolStartText(ev agent.Event) string {
+	return "→ " + ev.ToolName + " " + flattenLine(string(ev.Args), 160)
 }
 
-func (m *chatModel) refresh() {
-	if !m.ready {
-		return
+func toolEndText(ev agent.Event) string {
+	mark := "←"
+	if ev.IsError {
+		mark = "✗"
 	}
-	m.view.SetContent(renderTranscript(m.lines))
-	m.view.GotoBottom()
+	return mark + " " + flattenLine(ev.Result, 240)
+}
+
+// commitRaw prints a finished block into the terminal scrollback.
+func (m *chatModel) commitRaw(block string) tea.Cmd {
+	if strings.TrimSpace(block) == "" {
+		return nil
+	}
+	block = strings.TrimRight(block, "\n")
+	m.printed = append(m.printed, block)
+	return tea.Println(block)
+}
+
+func (m *chatModel) commitPlain(text string, style lipgloss.Style) tea.Cmd {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return nil
+	}
+	if m.width > 0 {
+		text = wrapPlain(text, m.width)
+	}
+	return m.commitRaw(style.Render(text))
+}
+
+func (m *chatModel) commitAssistant(text string) tea.Cmd {
+	text = strings.TrimRight(text, "\n")
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	if m.width > 0 {
+		text = wrapPlain(text, m.width)
+	}
+	return m.commitRaw(renderAssistant(text))
 }

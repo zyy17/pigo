@@ -39,3 +39,11 @@ func (m chatModel) header() string {
 	}
 	return wordmark() + "\n" + line
 }
+
+func (m chatModel) opening() string {
+	hint := "/skill:name loads a skill. /reset clears the chat. /exit quits."
+	if m.width > 0 {
+		hint = wrapPlain(hint, m.width)
+	}
+	return m.header() + "\n" + dimStyle.Render(hint)
+}
