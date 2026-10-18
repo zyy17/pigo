@@ -40,8 +40,15 @@ func TestAssistantProseUsesAccents(t *testing.T) {
 	title := styleProse("# Title")
 	body := styleProse("hello")
 	code := styleProse("use `code`")
-	if title == body || code == body {
-		t.Fatalf("heading and code collapsed into body text:\n%q\n%q", title, code)
+	bold := styleProse("**bold**")
+	if title == body || code == body || ansiCodes(bold) == ansiCodes(body) {
+		t.Fatalf("heading, code, or bold collapsed into body text:\n%q\n%q\n%q", title, code, bold)
+	}
+	if !strings.Contains(body, "232;217;168") {
+		t.Fatalf("prose is not #E8D9A8: %q", body)
+	}
+	if strings.Contains(title, "232;217;168") || strings.Contains(styleProse("`code`"), "232;217;168") {
+		t.Fatal("heading or inline code used the prose yellow")
 	}
 	if !strings.Contains(title, "00ADD8") && !strings.Contains(title, "38;2;0;173;216") {
 		t.Fatalf("heading is not cyan: %q", title)

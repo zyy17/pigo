@@ -19,11 +19,13 @@ var (
 	hintLabelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	sepStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 
-	// Assistant prose stays the default foreground. Accents match Codex:
-	// cyan for code, headings, and links; green and red for diffs.
+	// Assistant prose is a soft pale yellow. Codex leaves primary text as the
+	// terminal foreground; #E8D9A8 is the warm tone nearest that look on a
+	// dark background. Cyan, dim, green, and red accents stay separate.
+	proseStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#E8D9A8"))
 	headingStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8")).Bold(true)
-	strongStyle   = lipgloss.NewStyle().Bold(true)
-	emStyle       = lipgloss.NewStyle().Italic(true)
+	strongStyle   = proseStyle.Bold(true)
+	emStyle       = proseStyle.Italic(true)
 	linkStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8")).Underline(true)
 	quoteStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	listMarkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8"))
