@@ -254,14 +254,18 @@ func (m chatModel) barRows(content int) int {
 }
 
 func (m chatModel) inputRows() int {
-	room := m.height - 1
+	room := m.height - 2 // footer and the blank line above it
 	if room < 1 {
 		return 1
 	}
-	if m.live != "" || m.menuOpen() {
-		if room > 1 {
-			room--
-		}
+	if m.busy && room > 1 {
+		room--
+	}
+	if m.live != "" && room > 1 {
+		room--
+	}
+	if m.menuOpen() && room > 1 {
+		room--
 	}
 	const maxRows = maxContentLines + 2
 	if room > maxRows {

@@ -42,8 +42,8 @@ func TestCaretColumnForCJKAndWrap(t *testing.T) {
 		t.Fatalf("cjk not on caret row %d", y)
 	}
 	up := strings.Count(body, "\n") - y
-	if up != 2 {
-		t.Fatalf("caret should sit two lines above the footer, up=%d y=%d", up, y)
+	if up != 3 {
+		t.Fatalf("caret should sit on the prompt, with the pad, a blank line, and the footer below, up=%d y=%d", up, y)
 	}
 
 	m.comp.set(strings.Repeat("我们", 40) + " then some english")

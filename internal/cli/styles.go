@@ -35,7 +35,8 @@ var (
 	toolHeadStyle = lipgloss.NewStyle().Bold(true)
 	bulletStyle   = dimStyle
 
-	barStyle = lipgloss.NewStyle().
+	cardBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	barStyle        = lipgloss.NewStyle().
 			Background(lipgloss.Color("236")).
 			Foreground(lipgloss.Color("252"))
 	placeholderStyle = lipgloss.NewStyle().

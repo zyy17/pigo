@@ -66,34 +66,23 @@ func (m chatModel) layout() (body string, x, y int) {
 		return "", 0, 0
 	}
 	input, cx, cy := m.inputBlock()
-	menu := m.suggestView()
-	status := m.workingRow()
-	reserved := lipgloss.Height(input) + 1
-	if menu != "" {
-		reserved += lipgloss.Height(menu)
+	var above []string
+	if row := m.workingRow(); row != "" {
+		above = append(above, row)
 	}
-	if status != "" {
-		reserved += lipgloss.Height(status)
+	if menu := m.suggestView(); menu != "" {
+		above = append(above, menu)
 	}
-	var parts []string
-	if live := m.liveTail(reserved); live != "" {
-		parts = append(parts, live)
+	// input, a blank line, then the footer.
+	bottom := append(append([]string{}, above...), input, "", m.footer())
+	reserved := stackHeight(bottom)
+	var head []string
+	if live := m.liveTail(reserved + 1); live != "" {
+		// One blank line between the streaming reply and the working row.
+		head = append(head, live, "")
 	}
-	// The working row sits above the composer for the whole turn, the way
-	// Codex keeps its status line there while the reply streams.
-	if status != "" {
-		parts = append(parts, status)
-	}
-	if menu != "" {
-		parts = append(parts, menu)
-	}
-	before := 0
-	for _, part := range parts {
-		before += strings.Count(part, "\n") + 1
-	}
-	parts = append(parts, input, m.footer())
-	body = strings.Join(parts, "\n")
-	y = before + cy
+	y = stackHeight(head) + stackHeight(above) + cy
+	body = strings.Join(append(head, bottom...), "\n")
 	body, dropped := fitHeightDrop(body, m.height)
 	y -= dropped
 	if y < 0 {
@@ -269,11 +258,30 @@ func (m chatModel) renderBlock(b block) string {
 		return m.paintAssistant(b.text)
 	case kindTool:
 		return m.paintTool(b.text)
+	case kindInfo:
+		if strings.HasPrefix(b.text, "Worked for ") {
+			return m.workedRule(b.text)
+		}
+		return m.paintLines(b.text, dimStyle)
 	case kindError:
 		return m.paintLines(b.text, errStyle)
 	default:
 		return m.paintLines(b.text, dimStyle)
 	}
+}
+
+// workedRule is the dim separator under a finished turn.
+func (m chatModel) workedRule(label string) string {
+	width := m.width
+	if width < 1 {
+		width = ansi.StringWidth(label) + 2
+	}
+	lead := "─ " + label + " "
+	if ansi.StringWidth(lead) >= width {
+		return dimStyle.Render(ansi.Truncate(lead, width, ""))
+	}
+	rule := lead + strings.Repeat("─", width-ansi.StringWidth(lead))
+	return dimStyle.Render(rule)
 }
 
 func (m chatModel) paintTool(text string) string {
@@ -355,7 +363,7 @@ func (m chatModel) transcript() string {
 	for _, b := range m.blocks {
 		parts = append(parts, m.renderBlock(b))
 	}
-	return strings.Join(parts, "\n")
+	return strings.Join(parts, "\n\n")
 }
 
 func ranTitle(name string, args []byte) string {
@@ -399,6 +407,21 @@ func toolPreview(result string) string {
 
 func oneLine(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+}
+
+func stackHeight(parts []string) int {
+	n := 0
+	for _, part := range parts {
+		n += partHeight(part)
+	}
+	return n
+}
+
+func partHeight(s string) int {
+	if s == "" {
+		return 1
+	}
+	return lipgloss.Height(s)
 }
 
 func fitHeightDrop(s string, height int) (string, int) {
