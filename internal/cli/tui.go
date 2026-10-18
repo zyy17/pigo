@@ -116,7 +116,7 @@ func (m *chatModel) resize(width, height int) tea.Cmd {
 	m.height = height
 	if !m.ready {
 		m.ready = true
-		return tea.Println(m.opening())
+		return m.printCell(m.opening())
 	}
 	// Finished lines are already in the scrollback at the width they were
 	// printed. Reprinting them would duplicate the transcript. The composer,
@@ -266,5 +266,15 @@ func (m *chatModel) addBlock(kind blockKind, text string) tea.Cmd {
 		return nil
 	}
 	m.blocks = append(m.blocks, block{kind: kind, text: text})
-	return tea.Println(m.renderBlock(m.blocks[len(m.blocks)-1]))
+	return m.printCell(m.renderBlock(m.blocks[len(m.blocks)-1]))
+}
+
+// printCell writes one scrollback cell and the blank line after it.
+// Every history cell goes through here, so the gap is the same each time.
+func (m chatModel) printCell(cell string) tea.Cmd {
+	cell = strings.TrimRight(cell, "\n")
+	if cell == "" {
+		return nil
+	}
+	return tea.Println(cell + "\n")
 }

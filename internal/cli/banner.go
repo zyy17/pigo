@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // mark is the pigo wordmark. Columns are p, i, g, o.
@@ -32,18 +33,75 @@ func wordmark() string {
 	return b.String()
 }
 
-func (m chatModel) header() string {
-	line := dimStyle.Render("pigo " + version)
-	if m.height < 22 || m.width < 40 {
-		return line
+func (m chatModel) opening() string {
+	var parts []string
+	if m.height >= 22 && m.width >= 40 {
+		parts = append(parts, wordmark())
 	}
-	return wordmark() + "\n" + line
+	parts = append(parts, m.sessionCard(), m.hintLine())
+	return strings.Join(parts, "\n\n")
 }
 
-func (m chatModel) opening() string {
+func (m chatModel) hintLine() string {
 	hint := "/skill:name loads a skill. /reset clears the chat. /exit quits."
-	if m.width > 0 {
-		hint = wrapText(hint, m.width)
+	width := m.width
+	if width > 0 {
+		hint = wrapText(hint, width)
 	}
-	return m.header() + "\n" + dimStyle.Render(hint)
+	return dimStyle.Render(hint)
+}
+
+// sessionCard is the bordered session line: version, model, and directory.
+func (m chatModel) sessionCard() string {
+	width := m.width
+	if width < 1 {
+		width = 80
+	}
+	title := "pigo " + version
+	meta := sessionMeta(m.modelName, m.root)
+	if width < 12 {
+		if meta == "" {
+			return title
+		}
+		return title + "\n" + meta
+	}
+	inner := width - 2
+	top := cardBorderStyle.Render("╭" + strings.Repeat("─", inner) + "╮")
+	bot := cardBorderStyle.Render("╰" + strings.Repeat("─", inner) + "╯")
+	lines := []string{top, cardRow(title, false, inner)}
+	if meta != "" {
+		lines = append(lines, cardRow(meta, true, inner))
+	}
+	lines = append(lines, bot)
+	return strings.Join(lines, "\n")
+}
+
+func sessionMeta(model, root string) string {
+	model = oneLine(model)
+	root = oneLine(root)
+	switch {
+	case model != "" && root != "":
+		return model + " · " + root
+	case model != "":
+		return model
+	default:
+		return root
+	}
+}
+
+func cardRow(text string, dim bool, inner int) string {
+	room := inner - 2
+	if room < 1 {
+		room = 1
+	}
+	text = oneLine(text)
+	if ansi.StringWidth(text) > room {
+		text = ansi.Truncate(text, room, "…")
+	}
+	pad := room - ansi.StringWidth(text)
+	shown := text + strings.Repeat(" ", pad)
+	if dim {
+		shown = dimStyle.Render(shown)
+	}
+	return cardBorderStyle.Render("│ ") + shown + cardBorderStyle.Render(" │")
 }
