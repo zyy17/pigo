@@ -3,7 +3,6 @@ package cli
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/zyy17/pigo/internal/skills"
@@ -169,8 +168,3 @@ func paintSuggest(cmd slashCommand, width int, selected bool) string {
 	}
 	return suggestStyle.Render(line)
 }
-
-var (
-	suggestStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	suggestOnStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("#00ADD8"))
-)

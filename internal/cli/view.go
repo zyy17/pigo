@@ -10,23 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-var (
-	cyanStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8"))
-	coralStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	goldStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
-	dimStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	errStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	headStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58")).Bold(true)
-	statusReadyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5FBF6A"))
-	statusWorkStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
-	statusBadStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	modelStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8")).Bold(true)
-	pathStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	hintKeyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	hintLabelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	sepStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-)
-
 type footerKind int
 
 const (
@@ -284,11 +267,21 @@ func (m chatModel) renderBlock(b block) string {
 		return m.paintUser(b.text)
 	case kindAssistant:
 		return m.paintAssistant(b.text)
+	case kindTool:
+		return m.paintTool(b.text)
 	case kindError:
 		return m.paintLines(b.text, errStyle)
 	default:
 		return m.paintLines(b.text, dimStyle)
 	}
+}
+
+func (m chatModel) paintTool(text string) string {
+	style := dimStyle
+	if strings.HasPrefix(text, "• Ran ") {
+		style = toolHeadStyle
+	}
+	return m.paintLines(text, style)
 }
 
 func (m chatModel) paintUser(text string) string {
@@ -302,17 +295,20 @@ func (m chatModel) paintUser(text string) string {
 	}
 	lines := strings.Split(wrapText(text, inner), "\n")
 	var b strings.Builder
+	// Blank rows match the composer, so the sent message looks like the
+	// gray block that just left the input.
+	b.WriteString(paintBar("", width))
 	for i, line := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
+		b.WriteByte('\n')
 		prefix := "  "
 		if i == 0 {
 			prefix = "> "
 		}
-		b.WriteString(prefix + line)
+		b.WriteString(paintBar(prefix+line, width))
 	}
-	return barStyle.Width(width).Render(b.String())
+	b.WriteByte('\n')
+	b.WriteString(paintBar("", width))
+	return b.String()
 }
 
 func (m chatModel) paintAssistant(text string) string {
@@ -324,10 +320,10 @@ func (m chatModel) paintAssistant(text string) string {
 	if inner < 1 {
 		inner = 1
 	}
-	lines := strings.Split(renderAssistant(wrapText(text, inner)), "\n")
+	lines := strings.Split(styleProse(wrapText(text, inner)), "\n")
 	for i, line := range lines {
 		if i == 0 {
-			lines[i] = "• " + line
+			lines[i] = bulletStyle.Render("•") + " " + line
 		} else {
 			lines[i] = "  " + line
 		}
@@ -415,70 +411,4 @@ func fitHeightDrop(s string, height int) (string, int) {
 	}
 	drop := len(lines) - height
 	return strings.Join(lines[drop:], "\n"), drop
-}
-
-func renderAssistant(text string) string {
-	lines := strings.Split(text, "\n")
-	var b strings.Builder
-	code := false
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
-			code = !code
-			b.WriteString(dimStyle.Render(line))
-			continue
-		}
-		if code {
-			b.WriteString(cyanStyle.Render(line))
-			continue
-		}
-		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "#"); ok {
-			b.WriteString(headStyle.Render(strings.TrimSpace(strings.TrimLeft(rest, "#"))))
-			continue
-		}
-		b.WriteString(renderInline(line))
-	}
-	return b.String()
-}
-
-func renderInline(line string) string {
-	var b strings.Builder
-	for {
-		i := strings.IndexByte(line, '`')
-		if i < 0 {
-			b.WriteString(renderBold(line))
-			return b.String()
-		}
-		j := strings.IndexByte(line[i+1:], '`')
-		if j < 0 {
-			b.WriteString(renderBold(line))
-			return b.String()
-		}
-		j += i + 1
-		b.WriteString(renderBold(line[:i]))
-		b.WriteString(cyanStyle.Render(line[i+1 : j]))
-		line = line[j+1:]
-	}
-}
-
-func renderBold(line string) string {
-	var b strings.Builder
-	for {
-		i := strings.Index(line, "**")
-		if i < 0 {
-			b.WriteString(line)
-			return b.String()
-		}
-		j := strings.Index(line[i+2:], "**")
-		if j < 0 {
-			b.WriteString(line)
-			return b.String()
-		}
-		j += i + 2
-		b.WriteString(line[:i])
-		b.WriteString(headStyle.Render(line[i+2 : j]))
-		line = line[j+2:]
-	}
 }
