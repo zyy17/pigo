@@ -131,6 +131,18 @@ go run . -p "List the files here"
 
 `make lint` 用 `.golangci.yml` 运行 [golangci-lint](https://golangci-lint.run/) v2。CI 运行 `go test ./...` 和同一条 lint 命令。
 
+`make test` 包含不联网的端到端测试。它们对着本机的假 OpenAI 兼容服务跑，不需要 API 密钥。`make e2e` 用当前环境里的模型跑真实端到端测试：
+
+```bash
+make test
+make e2e
+# 或者
+go test ./...
+go test -tags e2e -count=1 -timeout 15m ./e2e/live/
+```
+
+没有 `OPENAI_API_KEY` 或 `OPENAI_BASE_URL` 时，真实测试会跳过。它们检查写出的文件和工具调用，不检查模型的原话。CI 在推送到 `main`、手动触发，以及本仓库自己的 pull request 上运行；密钥不存在时跳过，fork 不会拿到密钥。
+
 | 变量 | 含义 | 默认值 |
 | --- | --- | --- |
 | `PIGO_PROVIDER` | 聊天后端。`openai` 表示兼容 OpenAI 的 chat-completions 接口 | `openai` |
