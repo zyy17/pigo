@@ -131,6 +131,18 @@ go run . -p "List the files here"
 
 `make lint` runs [golangci-lint](https://golangci-lint.run/) v2 with `.golangci.yml`. CI runs `go test ./...` and the same lint command.
 
+`make test` includes hermetic end-to-end tests. They talk to a local fake OpenAI-compatible server, so they do not need an API key. `make e2e` runs the live suite against the model in your environment:
+
+```bash
+make test
+make e2e
+# or
+go test ./...
+go test -tags e2e -count=1 -timeout 15m ./e2e/live/
+```
+
+The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They check files and tool calls, not the model's wording. CI runs them on pushes to `main`, on manual dispatch, and on pull requests from this repository when those secrets exist. Forks skip them.
+
 | Variable | Meaning | Default |
 | --- | --- | --- |
 | `PIGO_PROVIDER` | Chat backend. `openai` is an OpenAI-compatible chat-completions endpoint | `openai` |
