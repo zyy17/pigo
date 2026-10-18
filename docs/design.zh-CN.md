@@ -72,7 +72,7 @@ sequenceDiagram
 
 从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`），然后是命令行参数。空值会被跳过。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示。
 
-聊天画面留在 `internal/cli`，不用备用屏幕。字标和已经完成的回合打印进终端回滚区，画面只重画正在流出的回复、带边框的输入框和页脚。`Agent.Prompt` 收到的仍然只是文本。
+聊天画面留在 `internal/cli`，不用备用屏幕。字标和已经完成的回合打印进终端回滚区，画面只重画正在流出的回复、灰色输入条和一行页脚。文本按终端宽度折行。`Agent.Prompt` 收到的仍然只是文本。
 
 ## 工具和工作区
 

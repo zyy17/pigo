@@ -103,7 +103,7 @@ make build
 ./pigo
 ```
 
-A terminal opens a chat on the normal screen. The pigo wordmark is printed once and stays in the scrollback. Finished turns — your line, the completed reply, and tool lines — are printed there too, so the mouse wheel and the terminal scrollback show the whole conversation. While a reply is streaming, only the bottom is redrawn: the text in progress, a spinner, the input box, and a footer. Enter sends, Alt+Enter inserts a newline, and Ctrl-C cancels the task in progress. `/skill:name` loads a skill, `/reset` clears the transcript and prints a separator, and `/exit` quits.
+A terminal opens a chat on the normal screen. The pigo wordmark is printed once and stays in the scrollback. Finished turns are printed there too, so the mouse wheel and the terminal scrollback show the whole conversation. Long lines, including CJK, wrap to the terminal width. The input bar, the streaming reply, and the footer follow the window when it is resized. While a reply is streaming, only the bottom is redrawn: the text in progress, a gray `>` input bar, and a one-line footer. Enter sends, Alt+Enter inserts a newline, and Ctrl-C cancels the task in progress. `/skill:name` loads a skill, `/reset` clears the transcript and prints a separator, and `/exit` quits.
 
 When stdin is not a terminal, the same commands work as a line session. That is what pipes and tests use.
 
