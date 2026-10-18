@@ -53,7 +53,15 @@ func runTUI(session *coding.Session) error {
 	cur := &frameCursor{}
 	model := newChat(session, events)
 	model.cur = cur
-	program := tea.NewProgram(model, tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}))
+	// Ask the terminal to distinguish Shift+Enter before the program reads keys,
+	// and turn that mode off again so the user's shell is unchanged.
+	enableShiftEnter(os.Stdout)
+	defer disableShiftEnter(os.Stdout)
+	program := tea.NewProgram(
+		model,
+		tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}),
+		tea.WithFilter(rewriteKeys),
+	)
 	_, err := program.Run()
 	return err
 }
@@ -92,6 +100,11 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(listen(m.events), cmd)
 		}
 		return m, cmd
+	case shiftEnterMsg:
+		if m.busy {
+			return m, nil
+		}
+		return m.newline()
 	case tea.KeyMsg:
 		return m.onKey(msg)
 	}
@@ -123,6 +136,10 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if m.busy {
+		// Esc stops the turn. The working row is the hint for that key.
+		if msg.Type == tea.KeyEsc && m.session != nil {
+			m.session.Abort()
+		}
 		return m, nil
 	}
 	return m.onComposer(msg)

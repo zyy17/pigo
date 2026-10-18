@@ -72,7 +72,7 @@ The turn limit is 25 model calls.
 
 Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`), then flags. Blank values are skipped. The CLI is Cobra: `pigo` opens the chat, and `-p` / `--print` runs one prompt.
 
-The chat screen stays in `internal/cli`. It does not use the alternate screen. The wordmark and finished turns are printed into the terminal scrollback, and the view redraws only the streaming reply, the gray input bar, and a one-line footer. Text wraps to the terminal width. `Agent.Prompt` still only receives the text.
+The chat screen stays in `internal/cli`. It does not use the alternate screen. The wordmark and finished turns are printed into the terminal scrollback, and the view redraws only the streaming reply, the working row, the gray input bar, and a one-line footer. Enter commits the user line to the scrollback and clears the composer. While the turn runs, the working row above the input shows a spinner, the elapsed time, and `esc to interrupt`. Shift+Enter inserts a newline when the terminal can report it; Ctrl+J, Alt+Enter, and a trailing backslash do that everywhere. Text wraps to the terminal width. `Agent.Prompt` still only receives the text.
 
 ## Tools and the workspace
 

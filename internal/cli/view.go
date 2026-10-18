@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -83,13 +84,22 @@ func (m chatModel) layout() (body string, x, y int) {
 	}
 	input, cx, cy := m.inputBlock()
 	menu := m.suggestView()
+	status := m.workingRow()
 	reserved := lipgloss.Height(input) + 1
 	if menu != "" {
 		reserved += lipgloss.Height(menu)
 	}
+	if status != "" {
+		reserved += lipgloss.Height(status)
+	}
 	var parts []string
 	if live := m.liveTail(reserved); live != "" {
 		parts = append(parts, live)
+	}
+	// The working row sits above the composer for the whole turn, the way
+	// Codex keeps its status line there while the reply streams.
+	if status != "" {
+		parts = append(parts, status)
 	}
 	if menu != "" {
 		parts = append(parts, menu)
@@ -130,16 +140,29 @@ func (m chatModel) footer() string {
 	if width < 1 {
 		width = 1
 	}
-	state := m.statusWord()
-	lead := ""
-	if m.busy {
-		lead = m.spin.View() + " "
+	return styleFooter(m.statusWord(), m.modelName, m.root, width)
+}
+
+// workingRow is the activity line above the composer: spinner, elapsed time,
+// and the key that stops the turn.
+func (m chatModel) workingRow() string {
+	if !m.busy {
+		return ""
 	}
-	budget := width - ansi.StringWidth(lead)
-	if budget < 1 {
-		budget = 1
+	width := m.width
+	if width < 1 {
+		width = 1
 	}
-	return lead + styleFooter(state, m.modelName, m.root, budget)
+	lead := m.spin.View()
+	if ansi.Strip(lead) == "" {
+		lead = statusWorkStyle.Render("•")
+	}
+	clock := fmtElapsed(time.Since(m.started))
+	line := lead + " " + statusWorkStyle.Render("Working") + " " + dimStyle.Render("("+clock+" • esc to interrupt)")
+	if ansi.StringWidth(line) > width {
+		return ansi.Truncate(line, width, "…")
+	}
+	return line
 }
 
 func (m chatModel) statusWord() string {
@@ -215,9 +238,9 @@ func footerPieces(state, model, root string, width int) []footerPiece {
 	root = oneLine(root)
 	hints := []footerHint{
 		{key: "enter", label: " send"},
+		{key: "shift+enter", label: " newline"},
 		{key: "ctrl-c", label: " abort"},
 		{key: "/", label: "exit"},
-		{key: "alt+enter", label: " newline"},
 	}
 	head := []footerPiece{
 		{footStatus, state},

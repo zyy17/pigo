@@ -83,15 +83,9 @@ func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
 		if msg.Alt {
-			m.comp.insert("\n")
-			m.noteTyped()
-			return m, nil
+			return m.newline()
 		}
-		if m.menuOpen() && partialCommand(m.comp.text(), m.matches()) {
-			m.completeSuggest()
-			return m, nil
-		}
-		return m.submit(strings.TrimSpace(m.comp.text()))
+		return m.onEnter()
 	case tea.KeyTab:
 		if m.menuOpen() {
 			m.completeSuggest()
@@ -111,9 +105,7 @@ func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyCtrlJ:
-		m.comp.insert("\n")
-		m.noteTyped()
-		return m, nil
+		return m.newline()
 	case tea.KeyRunes:
 		m.comp.insert(string(msg.Runes))
 		m.noteTyped()
@@ -152,9 +144,7 @@ func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	default:
 		if msg.String() == "alt+enter" {
-			m.comp.insert("\n")
-			m.noteTyped()
-			return m, nil
+			return m.newline()
 		}
 		return m, nil
 	}
