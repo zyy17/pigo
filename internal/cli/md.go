@@ -5,9 +5,8 @@ import (
 	"unicode/utf8"
 )
 
-// styleProse colors a wrapped assistant message. Body text keeps the
-// terminal's foreground. Code, headings, and links are accented, and a
-// unified diff is green or red.
+// styleProse colors a wrapped assistant message. Body text is pale yellow.
+// Code, headings, and links are accented, and a unified diff is green or red.
 func styleProse(text string) string {
 	lines := strings.Split(text, "\n")
 	var b strings.Builder
@@ -75,7 +74,7 @@ func styleDiffLine(line string) (string, bool) {
 	case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
 		return diffDelStyle.Render(line), true
 	case strings.HasPrefix(line, " "):
-		return line, true
+		return proseStyle.Render(line), true
 	default:
 		return "", false
 	}
@@ -122,23 +121,33 @@ func splitList(line string) (mark, rest string, ok bool) {
 }
 
 func styleInline(line string) string {
-	var b strings.Builder
+	var b, plain strings.Builder
+	flush := func() {
+		if plain.Len() == 0 {
+			return
+		}
+		b.WriteString(proseStyle.Render(plain.String()))
+		plain.Reset()
+	}
 	for len(line) > 0 {
 		switch {
 		case strings.HasPrefix(line, "**"):
 			if inner, rest, ok := cutMarked(line, "**"); ok {
+				flush()
 				b.WriteString(strongStyle.Render(inner))
 				line = rest
 				continue
 			}
 		case strings.HasPrefix(line, "`"):
 			if inner, rest, ok := cutMarked(line, "`"); ok {
+				flush()
 				b.WriteString(codeStyle.Render(inner))
 				line = rest
 				continue
 			}
 		case strings.HasPrefix(line, "["):
 			if label, url, rest, ok := cutLink(line); ok {
+				flush()
 				b.WriteString(linkStyle.Render(label))
 				b.WriteString(dimStyle.Render(" (" + url + ")"))
 				line = rest
@@ -146,15 +155,17 @@ func styleInline(line string) string {
 			}
 		case strings.HasPrefix(line, "*"):
 			if inner, rest, ok := cutMarked(line, "*"); ok {
+				flush()
 				b.WriteString(emStyle.Render(inner))
 				line = rest
 				continue
 			}
 		}
 		r, size := utf8.DecodeRuneInString(line)
-		b.WriteRune(r)
+		plain.WriteRune(r)
 		line = line[size:]
 	}
+	flush()
 	return b.String()
 }
 
