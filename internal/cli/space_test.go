@@ -20,7 +20,7 @@ func TestWordmarkProportions(t *testing.T) {
 			t.Fatalf("wordmark line width %d, want %d", ansi.StringWidth(line), width)
 		}
 	}
-	if width < 50 || width > 70 {
+	if width < 40 || width > 56 {
 		t.Fatalf("wordmark is %d cols", width)
 	}
 }
