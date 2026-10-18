@@ -38,11 +38,17 @@ func wordmark() string {
 
 func (m chatModel) opening() string {
 	var parts []string
-	if m.height >= 22 && m.width >= wordmarkCols() {
+	mark := m.height >= 22 && m.width >= wordmarkCols()
+	if mark {
 		parts = append(parts, wordmark())
 	}
 	parts = append(parts, m.sessionCard(), m.hintLine())
-	return strings.Join(parts, "\n\n")
+	body := strings.Join(parts, "\n\n")
+	if !mark {
+		return body
+	}
+	// One blank line keeps the wordmark off the shell prompt above it.
+	return "\n" + body
 }
 
 func wordmarkCols() int {

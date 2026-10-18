@@ -68,7 +68,9 @@ func (m chatModel) layout() (body string, x, y int) {
 	input, cx, cy := m.inputBlock()
 	var above []string
 	if row := m.workingRow(); row != "" {
-		above = append(above, row)
+		// The blank under the row sits before the composer. The blank above
+		// it is the scrollback gap, or the one line added with the live tail.
+		above = append(above, row, "")
 	}
 	if menu := m.suggestView(); menu != "" {
 		above = append(above, menu)
@@ -78,7 +80,6 @@ func (m chatModel) layout() (body string, x, y int) {
 	reserved := stackHeight(bottom)
 	var head []string
 	if live := m.liveTail(reserved + 1); live != "" {
-		// One blank line between the streaming reply and the working row.
 		head = append(head, live, "")
 	}
 	y = stackHeight(head) + stackHeight(above) + cy

@@ -250,10 +250,13 @@ func (m chatModel) inputRows() int {
 		return 1
 	}
 	if m.busy && room > 1 {
-		room--
+		room-- // working row
+	}
+	if m.busy && room > 1 {
+		room-- // blank line under the working row
 	}
 	if m.live != "" && room > 1 {
-		room--
+		room-- // blank line above the working row
 	}
 	if m.menuOpen() && room > 1 {
 		room--
