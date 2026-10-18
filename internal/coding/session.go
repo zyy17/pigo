@@ -110,6 +110,13 @@ func (s *Session) Root() string { return s.root }
 // Model is the model name sent on each request.
 func (s *Session) Model() string { return s.model }
 
+// Skills returns the discovered skills in menu order.
+func (s *Session) Skills() []skills.Skill {
+	out := make([]skills.Skill, len(s.skills))
+	copy(out, s.skills)
+	return out
+}
+
 // Subscribe registers a listener for agent events.
 func (s *Session) Subscribe(fn func(agent.Event)) { s.agent.Subscribe(fn) }
 

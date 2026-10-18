@@ -11,9 +11,8 @@ import (
 
 const askPlaceholder = "Ask pigo to do anything"
 
-// composer is the input line. It draws the caret itself. A textarea caret is
-// a cell in its own buffer, and once that buffer is wider than the screen the
-// terminal wraps the caret onto the footer.
+// composer is the text in the input bar. The real terminal cursor is moved
+// onto the caret after each frame so an IME popup opens there.
 type composer struct {
 	runes []rune
 	caret int
@@ -73,6 +72,11 @@ func (c *composer) wordBack() {
 	}
 }
 
+func (c *composer) set(s string) {
+	c.runes = []rune(s)
+	c.caret = len(c.runes)
+}
+
 func (c composer) text() string { return string(c.runes) }
 
 func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -80,23 +84,51 @@ func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		if msg.Alt {
 			m.comp.insert("\n")
+			m.noteTyped()
+			return m, nil
+		}
+		if m.menuOpen() && partialCommand(m.comp.text(), m.matches()) {
+			m.completeSuggest()
 			return m, nil
 		}
 		return m.submit(strings.TrimSpace(m.comp.text()))
+	case tea.KeyTab:
+		if m.menuOpen() {
+			m.completeSuggest()
+		}
+		return m, nil
+	case tea.KeyEsc:
+		m.suggestDismissed = true
+		return m, nil
+	case tea.KeyUp:
+		if m.menuOpen() {
+			m.moveSuggest(-1)
+		}
+		return m, nil
+	case tea.KeyDown:
+		if m.menuOpen() {
+			m.moveSuggest(1)
+		}
+		return m, nil
 	case tea.KeyCtrlJ:
 		m.comp.insert("\n")
+		m.noteTyped()
 		return m, nil
 	case tea.KeyRunes:
 		m.comp.insert(string(msg.Runes))
+		m.noteTyped()
 		return m, nil
 	case tea.KeySpace:
 		m.comp.insert(" ")
+		m.noteTyped()
 		return m, nil
 	case tea.KeyBackspace:
 		m.comp.backspace()
+		m.noteTyped()
 		return m, nil
 	case tea.KeyDelete:
 		m.comp.del()
+		m.noteTyped()
 		return m, nil
 	case tea.KeyLeft, tea.KeyCtrlB:
 		m.comp.left()
@@ -112,106 +144,173 @@ func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyCtrlU:
 		m.comp.clear()
+		m.noteTyped()
 		return m, nil
 	case tea.KeyCtrlW:
 		m.comp.wordBack()
+		m.noteTyped()
 		return m, nil
 	default:
 		if msg.String() == "alt+enter" {
 			m.comp.insert("\n")
+			m.noteTyped()
 			return m, nil
 		}
 		return m, nil
 	}
 }
 
-func (m chatModel) inputView() string {
+const (
+	inputPrompt     = "> "
+	minInputRows    = 3
+	maxContentLines = 8
+)
+
+// inputBlock draws the gray composer. x and y are the caret cell inside this
+// block: y counts from the top of the block, x is the display column.
+func (m chatModel) inputBlock() (view string, x, y int) {
 	width := m.width
 	if width < 1 {
 		width = 1
 	}
-	const prompt = "> "
-	gap := ansi.StringWidth(prompt)
+	gap := ansi.StringWidth(inputPrompt)
 	inner := width - gap
-	if inner < 2 {
-		inner = 2
+	if m.comp.caret == len(m.comp.runes) && inner > 1 {
+		// Leave a cell so a caret at the end does not wrap onto the next row.
+		inner--
 	}
-	// A caret at the end is an extra column, so the text wraps one sooner.
-	contentWidth := inner
-	if m.comp.caret == len(m.comp.runes) {
-		contentWidth = inner - 1
+	if inner < 1 {
+		inner = 1
 	}
-	if contentWidth < 1 {
-		contentWidth = 1
+	rows, caretLine, caretCol := wrapRunes(m.comp.runes, m.comp.caret, inner)
+	if len(rows) == 0 {
+		rows = [][]rune{{}}
 	}
-	rows, caretLine, caretCol := wrapRunes(m.comp.runes, m.comp.caret, contentWidth)
-	maxLines := m.height - 2
-	if maxLines < 1 {
-		maxLines = 1
+	total := m.barRows(len(rows))
+	pad := total >= minInputRows
+	slots := total
+	if pad {
+		slots = total - 2
+	}
+	if slots < 1 {
+		slots = 1
+		pad = false
 	}
 	start := 0
-	if len(rows) > maxLines {
-		start = caretLine - maxLines + 1
+	if len(rows) > slots {
+		start = caretLine - slots + 1
 		if start < 0 {
 			start = 0
 		}
-		if start+maxLines > len(rows) {
-			start = len(rows) - maxLines
+		if start+slots > len(rows) {
+			start = len(rows) - slots
 		}
 	}
 	var b strings.Builder
-	for i := start; i < len(rows) && i < start+maxLines; i++ {
+	y = 0
+	if pad {
+		b.WriteString(paintBar("", width))
+		b.WriteByte('\n')
+		y = 1
+	}
+	for i := start; i < len(rows) && i < start+slots; i++ {
 		if i > start {
 			b.WriteByte('\n')
 		}
 		prefix := strings.Repeat(" ", gap)
 		if i == 0 {
-			prefix = prompt
+			prefix = inputPrompt
 		}
-		switch {
-		case len(m.comp.runes) == 0 && i == 0:
-			hint := ansi.Truncate(askPlaceholder, width-2, "…")
-			b.WriteString(barLine(width, ">", " ", hint, true))
-		case i == caretLine:
-			b.WriteString(barCaretLine(width, prefix, rows[i], caretCol))
-		default:
-			b.WriteString(barLine(width, prefix+string(rows[i]), "", "", false))
+		if len(m.comp.runes) == 0 && i == 0 {
+			b.WriteString(paintPlaceholder(width))
+		} else {
+			b.WriteString(paintBar(prefix+string(rows[i]), width))
+		}
+		if i == caretLine {
+			y = 0
+			if pad {
+				y = 1
+			}
+			y += i - start
+			x = caretColumn(prefix, rows[i], caretCol)
 		}
 	}
-	return b.String()
+	if pad {
+		b.WriteByte('\n')
+		b.WriteString(paintBar("", width))
+	}
+	if x >= width {
+		x = width - 1
+	}
+	if x < 0 {
+		x = 0
+	}
+	return b.String(), x, y
 }
 
-// barLine paints one full-width input row. The caret is its own cell so a
-// later style pass cannot drop it or push it onto the footer.
-func barLine(width int, before, caret, after string, placeholder bool) string {
-	used := ansi.StringWidth(before) + ansi.StringWidth(caret) + ansi.StringWidth(after)
-	pad := width - used
+// barRows is the composer height, including the blank lines above and below.
+func (m chatModel) barRows(content int) int {
+	want := content + 2
+	if want < minInputRows {
+		want = minInputRows
+	}
+	max := m.inputRows()
+	if want > max {
+		want = max
+	}
+	if want < 1 {
+		return 1
+	}
+	return want
+}
+
+func (m chatModel) inputRows() int {
+	room := m.height - 1
+	if room < 1 {
+		return 1
+	}
+	if m.live != "" || m.menuOpen() {
+		if room > 1 {
+			room--
+		}
+	}
+	const maxRows = maxContentLines + 2
+	if room > maxRows {
+		return maxRows
+	}
+	return room
+}
+
+func caretColumn(prefix string, line []rune, col int) int {
+	if col > len(line) {
+		col = len(line)
+	}
+	return ansi.StringWidth(prefix + string(line[:col]))
+}
+
+func paintBar(line string, width int) string {
+	w := ansi.StringWidth(line)
+	if w > width {
+		line = ansi.Truncate(line, width, "")
+		w = ansi.StringWidth(line)
+	}
+	if w < width {
+		line += strings.Repeat(" ", width-w)
+	}
+	return barStyle.Render(line)
+}
+
+func paintPlaceholder(width int) string {
+	room := width - ansi.StringWidth(inputPrompt)
+	if room < 1 {
+		return paintBar(inputPrompt, width)
+	}
+	hint := ansi.Truncate(askPlaceholder, room, "…")
+	pad := room - ansi.StringWidth(hint)
 	if pad < 0 {
 		pad = 0
 	}
-	var b strings.Builder
-	if before != "" {
-		b.WriteString(barStyle.Render(before))
-	}
-	if caret != "" {
-		b.WriteString(caretStyle.Render(caret))
-	}
-	rest := after + strings.Repeat(" ", pad)
-	if rest != "" {
-		style := barStyle
-		if placeholder {
-			style = placeholderStyle
-		}
-		b.WriteString(style.Render(rest))
-	}
-	return b.String()
-}
-
-func barCaretLine(width int, prefix string, line []rune, col int) string {
-	if col >= len(line) {
-		return barLine(width, prefix+string(line), " ", "", false)
-	}
-	return barLine(width, prefix+string(line[:col]), string(line[col]), string(line[col+1:]), false)
+	return barStyle.Render(inputPrompt) + placeholderStyle.Render(hint+strings.Repeat(" ", pad))
 }
 
 // Keep the style values next to the composer so the input bar is one piece.
@@ -222,5 +321,4 @@ var (
 	placeholderStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("236")).
 				Foreground(lipgloss.Color("243"))
-	caretStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Reverse(true)
 )
