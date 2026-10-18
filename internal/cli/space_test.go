@@ -9,6 +9,22 @@ import (
 	"github.com/muesli/termenv"
 )
 
+func TestWordmarkIsAShortBanner(t *testing.T) {
+	lines := strings.Split(ansi.Strip(wordmark()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("wordmark is %d lines", len(lines))
+	}
+	width := ansi.StringWidth(lines[0])
+	for _, line := range lines[1:] {
+		if ansi.StringWidth(line) != width {
+			t.Fatalf("wordmark line width %d, want %d", ansi.StringWidth(line), width)
+		}
+	}
+	if width < 40 {
+		t.Fatalf("wordmark is only %d cols", width)
+	}
+}
+
 func TestSessionCardAndCellGaps(t *testing.T) {
 	m := newChat(nil, nil)
 	m.modelName = "glm-5.3"

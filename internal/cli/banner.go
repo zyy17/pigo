@@ -7,13 +7,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// mark is the pigo wordmark. Columns are p, i, g, o.
+// mark is the pigo wordmark. Three rows of wide letters, columns p, i, g, o.
 var mark = [][4]string{
-	{"██████", "██", "██████", "██████"},
-	{"██  ██", "██", "██    ", "██  ██"},
-	{"██████", "██", "██ ███", "██  ██"},
-	{"██    ", "██", "██  ██", "██  ██"},
-	{"██    ", "██", "██████", "██████"},
+	{"██████████", "██████", "██████████", "██████████"},
+	{"████████  ", "  ██  ", "██     ███", "██      ██"},
+	{"██        ", "██████", "████████  ", "██████████"},
 }
 
 func wordmark() string {
