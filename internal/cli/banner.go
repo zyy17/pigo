@@ -7,12 +7,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// mark is the pigo wordmark. Three rows of wide letters, columns p, i, g, o.
+// mark is the pigo wordmark. Columns are p, i, g, o. Each letter keeps a
+// counter or a stem so the four silhouettes stay distinct.
 var mark = [][4]string{
-	{"██████████", "██████", "██████████", "██████████"},
-	{"████████  ", "  ██  ", "██     ███", "██      ██"},
-	{"██        ", "██████", "████████  ", "██████████"},
+	{"██████████████", "██████████", "██████████████", "██████████████"},
+	{"██          ██", "    ██    ", "██            ", "██          ██"},
+	{"██          ██", "    ██    ", "██            ", "██          ██"},
+	{"██████████████", "    ██    ", "██        ████", "██          ██"},
+	{"██            ", "    ██    ", "██          ██", "██          ██"},
+	{"██            ", "██████████", "██████████████", "██████████████"},
 }
+
+// wordmarkGap is the clear space between letters.
+const wordmarkGap = "   "
 
 func wordmark() string {
 	colors := []lipgloss.Style{cyanStyle, coralStyle, goldStyle, cyanStyle}
@@ -23,7 +30,7 @@ func wordmark() string {
 		}
 		for j, col := range row {
 			if j > 0 {
-				b.WriteString("  ")
+				b.WriteString(wordmarkGap)
 			}
 			b.WriteString(colors[j].Render(col))
 		}
@@ -33,11 +40,25 @@ func wordmark() string {
 
 func (m chatModel) opening() string {
 	var parts []string
-	if m.height >= 22 && m.width >= 40 {
+	if m.height >= 22 && m.width >= wordmarkCols() {
 		parts = append(parts, wordmark())
 	}
 	parts = append(parts, m.sessionCard(), m.hintLine())
 	return strings.Join(parts, "\n\n")
+}
+
+func wordmarkCols() int {
+	if len(mark) == 0 || len(mark[0]) == 0 {
+		return 0
+	}
+	n := 0
+	for _, col := range mark[0] {
+		n += ansi.StringWidth(col)
+	}
+	if gaps := len(mark[0]) - 1; gaps > 0 {
+		n += gaps * ansi.StringWidth(wordmarkGap)
+	}
+	return n
 }
 
 func (m chatModel) hintLine() string {
