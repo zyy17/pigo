@@ -5,7 +5,6 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -302,13 +301,3 @@ func paintPlaceholder(width int) string {
 	}
 	return barStyle.Render(inputPrompt) + placeholderStyle.Render(hint+strings.Repeat(" ", pad))
 }
-
-// Keep the style values next to the composer so the input bar is one piece.
-var (
-	barStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("252"))
-	placeholderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("236")).
-				Foreground(lipgloss.Color("243"))
-)
