@@ -9,9 +9,9 @@ import (
 	"github.com/muesli/termenv"
 )
 
-func TestWordmarkIsAShortBanner(t *testing.T) {
+func TestWordmarkProportions(t *testing.T) {
 	lines := strings.Split(ansi.Strip(wordmark()), "\n")
-	if len(lines) != 3 {
+	if len(lines) < 5 || len(lines) > 6 {
 		t.Fatalf("wordmark is %d lines", len(lines))
 	}
 	width := ansi.StringWidth(lines[0])
@@ -20,8 +20,8 @@ func TestWordmarkIsAShortBanner(t *testing.T) {
 			t.Fatalf("wordmark line width %d, want %d", ansi.StringWidth(line), width)
 		}
 	}
-	if width < 40 {
-		t.Fatalf("wordmark is only %d cols", width)
+	if width < 50 || width > 70 {
+		t.Fatalf("wordmark is %d cols", width)
 	}
 }
 
