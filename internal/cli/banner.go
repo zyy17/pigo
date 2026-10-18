@@ -7,15 +7,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// mark is the pigo wordmark. Columns are p, i, g, o. Each letter keeps a
-// counter or a stem so the four silhouettes stay distinct.
+// mark is the pigo wordmark. Columns are p, i, g, o. Strokes are two
+// columns, with an open counter or a stem on every letter.
 var mark = [][4]string{
-	{"██████████████", "██████████", "██████████████", "██████████████"},
-	{"██          ██", "    ██    ", "██            ", "██          ██"},
-	{"██          ██", "    ██    ", "██            ", "██          ██"},
-	{"██████████████", "    ██    ", "██        ████", "██          ██"},
-	{"██            ", "    ██    ", "██          ██", "██          ██"},
-	{"██            ", "██████████", "██████████████", "██████████████"},
+	{"██████████", "██████", "██████████", "██████████"},
+	{"██      ██", "  ██  ", "██        ", "██      ██"},
+	{"██      ██", "  ██  ", "██        ", "██      ██"},
+	{"██████████", "  ██  ", "██    ████", "██      ██"},
+	{"██        ", "  ██  ", "██      ██", "██      ██"},
+	{"██        ", "██████", "██████████", "██████████"},
 }
 
 // wordmarkGap is the clear space between letters.
