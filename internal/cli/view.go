@@ -10,13 +10,37 @@ import (
 )
 
 var (
-	cyanStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8"))
-	coralStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	goldStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
-	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	errStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	headStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58")).Bold(true)
+	cyanStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8"))
+	coralStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
+	goldStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
+	dimStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	errStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
+	headStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58")).Bold(true)
+	statusReadyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5FBF6A"))
+	statusWorkStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
+	statusBadStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
+	modelStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8")).Bold(true)
+	pathStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	hintKeyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	hintLabelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	sepStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 )
+
+type footerKind int
+
+const (
+	footStatus footerKind = iota
+	footSep
+	footModel
+	footPath
+	footKey
+	footLabel
+)
+
+type footerPiece struct {
+	kind footerKind
+	text string
+}
 
 type blockKind int
 
@@ -34,26 +58,64 @@ type block struct {
 }
 
 func (m chatModel) View() string {
+	body, x, y := m.layout()
+	if m.cur != nil {
+		show := m.ready && !m.quitting && body != ""
+		up := 0
+		if show {
+			n := strings.Count(body, "\n")
+			up = n - y
+			if up < 0 {
+				up = 0
+			}
+		}
+		m.cur.set(x, up, show)
+	}
+	return body
+}
+
+// layout is the frame and the caret cell inside it. y counts from the top.
+func (m chatModel) layout() (body string, x, y int) {
 	// An empty view lets Bubble Tea erase the composer on quit.
 	// Finished lines were already printed into the scrollback.
 	if !m.ready || m.quitting {
-		return ""
+		return "", 0, 0
 	}
-	parts := make([]string, 0, 3)
-	if live := m.liveTail(); live != "" {
+	input, cx, cy := m.inputBlock()
+	menu := m.suggestView()
+	reserved := lipgloss.Height(input) + 1
+	if menu != "" {
+		reserved += lipgloss.Height(menu)
+	}
+	var parts []string
+	if live := m.liveTail(reserved); live != "" {
 		parts = append(parts, live)
 	}
-	parts = append(parts, m.inputView(), m.footer()+ansi.HideCursor)
-	return fitHeight(strings.Join(parts, "\n"), m.height)
+	if menu != "" {
+		parts = append(parts, menu)
+	}
+	before := 0
+	for _, part := range parts {
+		before += strings.Count(part, "\n") + 1
+	}
+	parts = append(parts, input, m.footer())
+	body = strings.Join(parts, "\n")
+	y = before + cy
+	body, dropped := fitHeightDrop(body, m.height)
+	y -= dropped
+	if y < 0 {
+		y = 0
+	}
+	return body, cx, y
 }
 
-func (m chatModel) liveTail() string {
+func (m chatModel) liveTail(reserved int) string {
 	if m.live == "" {
 		return ""
 	}
 	text := m.paintAssistant(m.live)
 	lines := strings.Split(text, "\n")
-	limit := m.height - lipgloss.Height(m.inputView()) - 1
+	limit := m.height - reserved
 	if limit < 1 {
 		limit = 1
 	}
@@ -68,36 +130,107 @@ func (m chatModel) footer() string {
 	if width < 1 {
 		width = 1
 	}
-	state := "ready"
+	state := m.statusWord()
 	lead := ""
 	if m.busy {
-		state = "working"
 		lead = m.spin.View() + " "
 	}
 	budget := width - ansi.StringWidth(lead)
 	if budget < 1 {
 		budget = 1
 	}
-	line := composeFooter(state, m.modelName, m.root, budget)
-	return lead + dimStyle.Render(line)
+	return lead + styleFooter(state, m.modelName, m.root, budget)
 }
 
-// composeFooter keeps a single line. The path shrinks first, then hints drop
-// from the end, and whatever remains is cut with an ellipsis.
+func (m chatModel) statusWord() string {
+	if m.busy {
+		return "working"
+	}
+	if m.status == "" {
+		return "ready"
+	}
+	return m.status
+}
+
+// composeFooter is the plain status line. The path shrinks first, then hints
+// drop from the end, and whatever remains is cut with an ellipsis.
 func composeFooter(state, model, root string, width int) string {
+	return piecesPlain(footerPieces(state, model, root, width))
+}
+
+func styleFooter(state, model, root string, width int) string {
+	var b strings.Builder
+	for _, piece := range footerPieces(state, model, root, width) {
+		b.WriteString(piece.style(state).Render(piece.text))
+	}
+	return b.String()
+}
+
+func piecesPlain(parts []footerPiece) string {
+	var b strings.Builder
+	for _, piece := range parts {
+		b.WriteString(piece.text)
+	}
+	return b.String()
+}
+
+func (p footerPiece) style(state string) lipgloss.Style {
+	switch p.kind {
+	case footStatus:
+		return statusStyle(state)
+	case footModel:
+		return modelStyle
+	case footPath:
+		return pathStyle
+	case footKey:
+		return hintKeyStyle
+	case footLabel:
+		return hintLabelStyle
+	default:
+		return sepStyle
+	}
+}
+
+func statusStyle(state string) lipgloss.Style {
+	switch state {
+	case "working":
+		return statusWorkStyle
+	case "interrupted", "error":
+		return statusBadStyle
+	default:
+		return statusReadyStyle
+	}
+}
+
+type footerHint struct {
+	key   string
+	label string
+}
+
+func footerPieces(state, model, root string, width int) []footerPiece {
 	if width < 1 {
-		return ""
+		return nil
 	}
 	model = oneLine(model)
 	root = oneLine(root)
-	hints := []string{"enter send", "ctrl-c abort", "/exit", "alt+enter newline"}
-	head := state + " · " + model + " · "
+	hints := []footerHint{
+		{key: "enter", label: " send"},
+		{key: "ctrl-c", label: " abort"},
+		{key: "/", label: "exit"},
+		{key: "alt+enter", label: " newline"},
+	}
+	head := []footerPiece{
+		{footStatus, state},
+		{footSep, " · "},
+		{footModel, model},
+		{footSep, " · "},
+	}
 	for n := len(hints); n >= 0; n-- {
-		tail := ""
-		if n > 0 {
-			tail = " · " + strings.Join(hints[:n], " · ")
+		var tail []footerPiece
+		for _, hint := range hints[:n] {
+			tail = append(tail, footerPiece{footSep, " · "}, footerPiece{footKey, hint.key}, footerPiece{footLabel, hint.label})
 		}
-		room := width - ansi.StringWidth(head) - ansi.StringWidth(tail)
+		room := width - piecesWidth(head) - piecesWidth(tail)
 		if room < 1 {
 			continue
 		}
@@ -108,12 +241,18 @@ func composeFooter(state, model, root string, width int) string {
 		if shown == "" {
 			continue
 		}
-		line := head + shown + tail
-		if ansi.StringWidth(line) <= width {
-			return line
+		parts := append(append([]footerPiece{}, head...), footerPiece{footPath, shown})
+		parts = append(parts, tail...)
+		if piecesWidth(parts) <= width {
+			return parts
 		}
 	}
-	return ansi.Truncate(state+" · "+model+" · "+root, width, "…")
+	plain := ansi.Truncate(state+" · "+model+" · "+root, width, "…")
+	return []footerPiece{{footStatus, plain}}
+}
+
+func piecesWidth(parts []footerPiece) int {
+	return ansi.StringWidth(piecesPlain(parts))
 }
 
 func (m chatModel) renderBlock(b block) string {
@@ -243,15 +382,16 @@ func oneLine(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
 }
 
-func fitHeight(s string, height int) string {
+func fitHeightDrop(s string, height int) (string, int) {
 	if height <= 0 || s == "" {
-		return s
+		return s, 0
 	}
 	lines := strings.Split(s, "\n")
 	if len(lines) <= height {
-		return s
+		return s, 0
 	}
-	return strings.Join(lines[len(lines)-height:], "\n")
+	drop := len(lines) - height
+	return strings.Join(lines[drop:], "\n"), drop
 }
 
 func renderAssistant(text string) string {

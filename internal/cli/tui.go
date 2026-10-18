@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,23 +14,29 @@ import (
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 	"github.com/zyy17/pigo/internal/coding"
+	"github.com/zyy17/pigo/internal/skills"
 )
 
 type chatModel struct {
-	session   *coding.Session
-	modelName string
-	root      string
-	comp      composer
-	spin      spinner.Model
-	events    chan agent.Event
-	blocks    []block
-	live      string
-	width     int
-	height    int
-	ready     bool
-	busy      bool
-	quitting  bool
-	started   time.Time
+	session          *coding.Session
+	modelName        string
+	root             string
+	comp             composer
+	spin             spinner.Model
+	events           chan agent.Event
+	blocks           []block
+	skills           []skills.Skill
+	live             string
+	status           string
+	width            int
+	height           int
+	suggestAt        int
+	ready            bool
+	busy             bool
+	quitting         bool
+	suggestDismissed bool
+	started          time.Time
+	cur              *frameCursor
 }
 
 type streamMsg struct {
@@ -43,7 +50,10 @@ func runTUI(session *coding.Session) error {
 	session.Subscribe(func(ev agent.Event) {
 		events <- ev
 	})
-	program := tea.NewProgram(newChat(session, events))
+	cur := &frameCursor{}
+	model := newChat(session, events)
+	model.cur = cur
+	program := tea.NewProgram(model, tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}))
 	_, err := program.Run()
 	return err
 }
@@ -51,12 +61,14 @@ func runTUI(session *coding.Session) error {
 func newChat(session *coding.Session, events chan agent.Event) chatModel {
 	m := chatModel{
 		session: session,
-		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(cyanStyle)),
+		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(statusWorkStyle)),
 		events:  events,
+		status:  "ready",
 	}
 	if session != nil {
 		m.modelName = session.Model()
 		m.root = session.Root()
+		m.skills = session.Skills()
 	}
 	return m
 }
@@ -117,7 +129,7 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
-	switch text {
+	switch strings.ToLower(text) {
 	case "":
 		return m, nil
 	case "/exit", "exit", "quit", "/quit":
@@ -220,11 +232,14 @@ func (m *chatModel) noteEnd(err error) tea.Cmd {
 		}
 	}
 	if err == nil {
+		m.status = "ready"
 		return tea.Batch(flush, extra)
 	}
 	if errors.Is(err, agent.ErrInterrupted) {
+		m.status = "interrupted"
 		return tea.Batch(flush, m.addBlock(kindInfo, "interrupted"))
 	}
+	m.status = "error"
 	return tea.Batch(flush, m.addBlock(kindError, err.Error()))
 }
 
