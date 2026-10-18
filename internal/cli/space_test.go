@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -48,6 +49,14 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 	}
 	if !strings.Contains(plain, "██████\n\n╭") {
 		t.Fatal("wordmark is glued to the session card")
+	}
+	if !strings.HasPrefix(plain, "\n█") || strings.HasPrefix(plain, "\n\n") {
+		t.Fatal("wordmark should have one blank line above it")
+	}
+	short := newChat(nil, nil)
+	short.resize(80, 10)
+	if strings.HasPrefix(ansi.Strip(short.opening()), "\n") {
+		t.Fatal("a short terminal still leads with a blank wordmark line")
 	}
 	if !strings.Contains(plain, "• world\n\n─ Worked for 17s") {
 		t.Fatalf("assistant cell is glued to the worked rule:\n%s", plain)
@@ -130,5 +139,79 @@ func TestComposerGapKeepsTheCaret(t *testing.T) {
 			t.Fatalf("width %d up=%d", width, up)
 		}
 		assertWidth(t, body, width)
+	}
+}
+
+func TestWorkingRowBreathingRoom(t *testing.T) {
+	for _, width := range []int{80, 110} {
+		m := newChat(nil, nil)
+		m.resize(width, 24)
+		m.busy = true
+		m.started = time.Now()
+
+		body, x, y := m.layout()
+		lines := strings.Split(body, "\n")
+		wi := workingLine(t, lines)
+		if wi != 0 {
+			t.Fatalf("width %d working row at %d, the scrollback gap is the blank above it", width, wi)
+		}
+		if lines[wi+1] != "" {
+			t.Fatalf("width %d missing the blank under the working row: %q", width, lines[wi+1])
+		}
+		assertCaret(t, lines, x, y, body)
+
+		m.live = "streaming reply"
+		body, x, y = m.layout()
+		lines = strings.Split(body, "\n")
+		plain := ansi.Strip(body)
+		if strings.Contains(plain, "\n\n\n") {
+			t.Fatalf("width %d doubled blank while streaming:\n%s", width, plain)
+		}
+		wi = workingLine(t, lines)
+		if wi < 2 || lines[wi-1] != "" || strings.TrimSpace(ansi.Strip(lines[wi-2])) == "" {
+			t.Fatalf("width %d streaming gap around row %d:\n%s", width, wi, plain)
+		}
+		if lines[wi+1] != "" {
+			t.Fatalf("width %d missing the blank under the working row while streaming", width)
+		}
+		assertCaret(t, lines, x, y, body)
+		if h := lipglossHeight(body); h > 24 {
+			t.Fatalf("width %d working frame is %d lines", width, h)
+		}
+	}
+
+	m := newChat(nil, nil)
+	m.resize(40, 8)
+	m.busy = true
+	m.started = time.Now()
+	body, x, y := m.layout()
+	lines := strings.Split(body, "\n")
+	if len(lines) > 8 {
+		t.Fatalf("short frame is %d lines", len(lines))
+	}
+	if workingLine(t, lines) < 0 {
+		t.Fatal("short frame clipped the working row")
+	}
+	assertCaret(t, lines, x, y, body)
+}
+
+func workingLine(t *testing.T, lines []string) int {
+	t.Helper()
+	for i, line := range lines {
+		if strings.Contains(ansi.Strip(line), "Working") {
+			return i
+		}
+	}
+	t.Fatal("working row missing")
+	return -1
+}
+
+func assertCaret(t *testing.T, lines []string, x, y int, body string) {
+	t.Helper()
+	if x != 2 || y < 0 || y >= len(lines) || !strings.Contains(ansi.Strip(lines[y]), askPlaceholder) {
+		t.Fatalf("caret x=%d y=%d", x, y)
+	}
+	if up := strings.Count(body, "\n") - y; up != 3 {
+		t.Fatalf("up=%d, want the pad, the blank line, and the footer", up)
 	}
 }
