@@ -11,7 +11,7 @@ import (
 
 func TestWordmarkProportions(t *testing.T) {
 	lines := strings.Split(ansi.Strip(wordmark()), "\n")
-	if len(lines) < 5 || len(lines) > 6 {
+	if len(lines) != 4 {
 		t.Fatalf("wordmark is %d lines", len(lines))
 	}
 	width := ansi.StringWidth(lines[0])
@@ -20,7 +20,7 @@ func TestWordmarkProportions(t *testing.T) {
 			t.Fatalf("wordmark line width %d, want %d", ansi.StringWidth(line), width)
 		}
 	}
-	if width < 40 || width > 56 {
+	if width < 32 || width > 38 {
 		t.Fatalf("wordmark is %d cols", width)
 	}
 }

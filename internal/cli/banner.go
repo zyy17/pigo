@@ -7,19 +7,17 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// mark is the pigo wordmark. Columns are p, i, g, o. Strokes are two
-// columns, with an open counter or a stem on every letter.
+// mark is the pigo wordmark. Columns are p, i, g, o. Four rows, strokes
+// two columns wide, with a counter or a stem on every letter.
 var mark = [][4]string{
-	{"██████████", "██████", "██████████", "██████████"},
-	{"██      ██", "  ██  ", "██        ", "██      ██"},
-	{"██      ██", "  ██  ", "██        ", "██      ██"},
-	{"██████████", "  ██  ", "██    ████", "██      ██"},
-	{"██        ", "  ██  ", "██      ██", "██      ██"},
-	{"██        ", "██████", "██████████", "██████████"},
+	{"████████", "██████", "████████", "████████"},
+	{"██    ██", "  ██  ", "██      ", "██    ██"},
+	{"████████", "  ██  ", "██  ████", "██    ██"},
+	{"██      ", "██████", "████████", "████████"},
 }
 
 // wordmarkGap is the clear space between letters.
-const wordmarkGap = "   "
+const wordmarkGap = "  "
 
 func wordmark() string {
 	colors := []lipgloss.Style{cyanStyle, coralStyle, goldStyle, cyanStyle}
