@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,21 @@ func TestDotEnvDoesNotOverrideEnv(t *testing.T) {
 	}
 	if cfg.BaseURL != "http://example.test/v1" || cfg.APIKey != "secret" {
 		t.Fatalf("%#v", cfg)
+	}
+}
+
+func TestLoadRejectsBadYAML(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PIGO_PROVIDER", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+	if err := os.WriteFile("pigo.yaml", []byte("model: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(Config{}); err == nil || !strings.Contains(err.Error(), "pigo.yaml") {
+		t.Fatal(err)
 	}
 }
 
