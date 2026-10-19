@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"strings"
+	"unicode"
 
 	"github.com/zyy17/pigo/internal/coding"
 )
@@ -26,6 +27,8 @@ func parseSkill(line string) (name, request string, ok bool) {
 		return "", "", false
 	}
 	rest := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	name, request, _ = strings.Cut(rest, " ")
-	return strings.TrimSpace(name), strings.TrimSpace(request), true
+	if i := strings.IndexFunc(rest, unicode.IsSpace); i >= 0 {
+		return rest[:i], strings.TrimSpace(rest[i:]), true
+	}
+	return rest, "", true
 }
