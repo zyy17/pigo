@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 )
@@ -20,21 +22,25 @@ func render(w io.Writer, ev agent.Event) {
 			fmt.Fprintln(w)
 		}
 	case agent.ToolStart:
-		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, flattenLine(string(ev.Args), 160))
+		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, flattenLine(string(ev.Args), toolArgCols))
 	case agent.ToolEnd:
 		mark := "←"
 		if ev.IsError {
 			mark = "✗"
 		}
-		fmt.Fprintf(w, "%s %s\n", mark, flattenLine(ev.Result, 240))
+		fmt.Fprintf(w, "%s %s\n", mark, flattenLine(ev.Result, toolResultCols))
 	}
 }
 
-func flattenLine(s string, max int) string {
+const (
+	toolArgCols    = 160
+	toolResultCols = 240
+)
+
+func flattenLine(s string, width int) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	r := []rune(s)
-	if len(r) <= max {
+	if width < 1 || ansi.StringWidth(s) <= width {
 		return s
 	}
-	return string(r[:max]) + "…"
+	return ansi.Truncate(s, width, "…")
 }
