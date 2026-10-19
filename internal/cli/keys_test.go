@@ -87,8 +87,8 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 		t.Fatal("user line was not committed")
 	}
 	view := ansi.Strip(m.View())
-	if strings.Contains(view, "hello there") {
-		t.Fatal("committed text still in the live view")
+	if !strings.Contains(view, "> hello there") || !strings.Contains(view, askPlaceholder) {
+		t.Fatal("committed line is not in the transcript above a cleared composer")
 	}
 	for _, want := range []string{"Working", "esc to interrupt", "0s", askPlaceholder} {
 		if !strings.Contains(view, want) {

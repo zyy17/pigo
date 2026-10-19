@@ -59,33 +59,20 @@ func (m chatModel) View() string {
 }
 
 // layout is the frame and the caret cell inside it. y counts from the top.
+// The transcript fills the space above a fixed composer and footer.
 func (m chatModel) layout() (body string, x, y int) {
-	// An empty view lets Bubble Tea erase the composer on quit.
-	// Finished lines were already printed into the scrollback.
+	// An empty view lets Bubble Tea erase the frame on quit.
 	if !m.ready || m.quitting {
 		return "", 0, 0
 	}
 	input, cx, cy := m.inputBlock()
-	var above []string
-	if panel := m.confirmView(); panel != "" {
-		// The confirm panel takes the working-row slot. Esc denies the
-		// command, so the interrupt hint stays hidden.
-		above = append(above, panel, "")
-	} else if row := m.workingRow(); row != "" {
-		// The blank under the row sits before the composer. The blank above
-		// it is the scrollback gap, or the one line added with the live tail.
-		above = append(above, row, "")
-	}
-	if menu := m.suggestView(); menu != "" {
-		above = append(above, menu)
-	}
-	// input, a blank line, then the footer.
+	above := m.chromeAbove()
 	bottom := append(append([]string{}, above...), input, "", m.footer())
-	reserved := stackHeight(bottom)
-	var head []string
-	if live := m.liveTail(reserved + 1); live != "" {
-		head = append(head, live, "")
+	room := m.height - stackHeight(bottom)
+	if room < 0 {
+		room = 0
 	}
+	head := m.transcriptWindow(room)
 	y = stackHeight(head) + stackHeight(above) + cy
 	body = strings.Join(append(head, bottom...), "\n")
 	body, dropped := fitHeightDrop(body, m.height)
@@ -96,20 +83,123 @@ func (m chatModel) layout() (body string, x, y int) {
 	return body, cx, y
 }
 
-func (m chatModel) liveTail(reserved int) string {
-	if m.live == "" {
-		return ""
+// chromeAbove is the fixed band between the transcript and the composer.
+func (m chatModel) chromeAbove() []string {
+	above := []string{""}
+	if panel := m.confirmView(); panel != "" {
+		// The confirm panel takes the working-row slot. Esc denies the
+		// command, so the interrupt hint stays hidden.
+		above = append(above, panel, "")
+	} else if row := m.workingRow(); row != "" {
+		above = append(above, row, "")
 	}
-	text := m.paintAssistant(m.live)
-	lines := strings.Split(text, "\n")
-	limit := m.height - reserved
-	if limit < 1 {
-		limit = 1
+	if menu := m.suggestView(); menu != "" {
+		above = append(above, menu)
 	}
-	if len(lines) > limit {
-		lines = lines[len(lines)-limit:]
+	return above
+}
+
+func (m chatModel) transcriptRows() int {
+	input, _, _ := m.inputBlock()
+	bottom := append(append([]string{}, m.chromeAbove()...), input, "", m.footer())
+	room := m.height - stackHeight(bottom)
+	if room < 0 {
+		return 0
 	}
-	return strings.Join(lines, "\n")
+	return room
+}
+
+// transcriptWindow is the visible slice of the transcript. Short history
+// stays at the top of that slice; the spare rows sit above the composer.
+func (m chatModel) transcriptWindow(room int) []string {
+	if room <= 0 {
+		return nil
+	}
+	lines := m.historyLines()
+	start := m.viewTop(len(lines), room)
+	end := start + room
+	if end > len(lines) {
+		end = len(lines)
+	}
+	window := make([]string, 0, room)
+	if start < end {
+		window = append(window, lines[start:end]...)
+	}
+	for len(window) < room {
+		window = append(window, "")
+	}
+	return window
+}
+
+func (m chatModel) viewTop(n, room int) int {
+	maxStart := n - room
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if m.follow || m.top >= maxStart {
+		return maxStart
+	}
+	if m.top < 0 {
+		return 0
+	}
+	return m.top
+}
+
+// scrollRows moves the transcript. Negative rows go toward older lines.
+// Reaching the tail resumes follow, so the next output sticks to the bottom.
+func (m chatModel) scrollRows(rows int) chatModel {
+	if rows == 0 || !m.ready {
+		return m
+	}
+	n := len(m.historyLines())
+	room := m.transcriptRows()
+	maxStart := n - room
+	if maxStart < 1 {
+		m.follow = true
+		m.top = 0
+		return m
+	}
+	start := maxStart
+	if !m.follow {
+		start = m.top
+		if start < 0 {
+			start = 0
+		}
+		if start > maxStart {
+			start = maxStart
+		}
+	}
+	next := start + rows
+	if next < 0 {
+		next = 0
+	}
+	if next >= maxStart {
+		m.follow = true
+		m.top = 0
+		return m
+	}
+	m.follow = false
+	m.top = next
+	return m
+}
+
+// pageRows is one viewport minus a one-line overlap, matching Codex.
+func (m chatModel) pageRows() int {
+	page := m.transcriptRows() - 1
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func (m chatModel) canReturn() bool {
+	if m.follow || !m.ready {
+		return false
+	}
+	n := len(m.historyLines())
+	room := m.transcriptRows()
+	maxStart := n - room
+	return maxStart > 0 && m.top < maxStart
 }
 
 func (m chatModel) footer() string {
@@ -362,14 +452,31 @@ func (m chatModel) paintLines(text string, style lipgloss.Style) string {
 }
 
 func (m chatModel) transcript() string {
-	parts := make([]string, 0, len(m.blocks)+1)
+	return strings.Join(m.historyParts(false), "\n\n")
+}
+
+func (m chatModel) historyLines() []string {
+	text := strings.Join(m.historyParts(true), "\n\n")
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
+func (m chatModel) historyParts(includeLive bool) []string {
+	parts := make([]string, 0, len(m.blocks)+2)
 	if m.ready {
-		parts = append(parts, m.opening())
+		if opening := m.opening(); opening != "" {
+			parts = append(parts, opening)
+		}
 	}
 	for _, b := range m.blocks {
 		parts = append(parts, m.renderBlock(b))
 	}
-	return strings.Join(parts, "\n\n")
+	if includeLive && strings.TrimSpace(m.live) != "" {
+		parts = append(parts, m.paintAssistant(m.live))
+	}
+	return parts
 }
 
 func ranTitle(name string, args []byte) string {

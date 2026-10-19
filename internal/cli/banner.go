@@ -47,7 +47,7 @@ func (m chatModel) opening() string {
 	if !mark {
 		return body
 	}
-	// One blank line keeps the wordmark off the shell prompt above it.
+	// One blank line above the wordmark, the same gap the cells use.
 	return "\n" + body
 }
 

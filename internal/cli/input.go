@@ -249,6 +249,9 @@ func (m chatModel) inputRows() int {
 	if room < 1 {
 		return 1
 	}
+	if room > 1 {
+		room-- // blank line between the transcript and this chrome
+	}
 	if m.ask != nil {
 		// Four confirm lines plus the blank under the panel.
 		for range 5 {
@@ -264,9 +267,6 @@ func (m chatModel) inputRows() int {
 		if m.busy && room > 1 {
 			room-- // blank line under the working row
 		}
-	}
-	if m.live != "" && room > 1 {
-		room-- // blank line above the working row
 	}
 	if m.menuOpen() && room > 1 {
 		room--

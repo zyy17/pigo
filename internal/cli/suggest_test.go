@@ -66,8 +66,8 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 	if !strings.Contains(m.transcript(), "transcript cleared") {
 		t.Fatal("second enter did not reset")
 	}
-	if cmd == nil {
-		t.Fatal("missing reset print")
+	if cmd != nil {
+		t.Fatal("reset printed into the terminal")
 	}
 
 	m.comp.set("/e")
@@ -91,16 +91,23 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 func TestSuggestSitsAboveTheCaret(t *testing.T) {
 	m := newChat(nil, nil)
 	m.resize(80, 24)
-	_, _, y0 := m.layout()
 	m.comp.insert("/")
 	body, x, y := m.layout()
-	if y <= y0 {
-		t.Fatalf("menu did not push the caret down: %d -> %d", y0, y)
-	}
 	if x != 3 {
 		t.Fatalf("caret after '> /' at column %d", x)
 	}
-	if !strings.Contains(body, "/reset") || !strings.Contains(body, "clear the transcript") {
-		t.Fatalf("menu missing:\n%s", body)
+	lines := strings.Split(body, "\n")
+	menuAt := -1
+	for i, line := range lines {
+		if strings.Contains(line, "/reset") && strings.Contains(line, "clear the transcript") {
+			menuAt = i
+			break
+		}
+	}
+	if menuAt < 0 || menuAt >= y {
+		t.Fatalf("menu at %d, caret at %d\n%s", menuAt, y, body)
+	}
+	if !strings.Contains(lines[y], "> /") {
+		t.Fatalf("caret row: %q", lines[y])
 	}
 }

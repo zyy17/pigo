@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -44,13 +45,10 @@ func TestChatLayout(t *testing.T) {
 			t.Fatalf("layout missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "██████") {
-		t.Fatal("wordmark is redrawn in the live view")
-	}
-	opened := m.transcript()
+	opened := ansi.Strip(got)
 	for _, want := range []string{"pigo", "0.1.0", "██████"} {
 		if !strings.Contains(opened, want) {
-			t.Fatalf("scrollback missing %q:\n%s", want, opened)
+			t.Fatalf("transcript missing %q:\n%s", want, opened)
 		}
 	}
 
@@ -65,14 +63,14 @@ func TestChatLayout(t *testing.T) {
 		Type:    agent.MessageEnd,
 		Message: ai.Assistant("# Title\nuse `code` and **bold**", ai.StopStop),
 	})
-	if strings.Contains(m.View(), "Title") {
-		t.Fatal("finished reply still in the live view")
-	}
-	done := m.transcript()
-	for _, want := range []string{"Title", "code", "bold"} {
+	done := ansi.Strip(m.View())
+	for _, want := range []string{"Title", "code", "bold", askPlaceholder} {
 		if !strings.Contains(done, want) {
-			t.Fatalf("scrollback missing %q:\n%s", want, done)
+			t.Fatalf("finished reply missing %q:\n%s", want, done)
 		}
+	}
+	if lipgloss.Height(m.View()) > 24 {
+		t.Fatal("finished frame is taller than the terminal")
 	}
 }
 
@@ -109,10 +107,9 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 	}
 }
 
-func TestFinishedTurnsLeaveTheLiveView(t *testing.T) {
+func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
 	m := newChat(nil, nil)
 	m.resize(80, 24)
-	base := lipgloss.Height(m.View())
 	var text strings.Builder
 	for range 40 {
 		text.WriteString("line\n")
@@ -122,12 +119,19 @@ func TestFinishedTurnsLeaveTheLiveView(t *testing.T) {
 		t.Fatalf("streaming view is %d lines", h)
 	}
 	assertWidth(t, m.View(), 80)
-	m.apply(agent.Event{Type: agent.MessageEnd, Message: ai.Assistant(text.String(), ai.StopStop)})
-	if lipgloss.Height(m.View()) != base {
-		t.Fatalf("after commit view height %d want %d", lipgloss.Height(m.View()), base)
+	if !strings.Contains(m.View(), "line") {
+		t.Fatal("streaming reply is not in the frame")
 	}
-	if !strings.Contains(m.transcript(), "line") {
-		t.Fatal("scrollback missing the finished reply")
+	m.apply(agent.Event{Type: agent.MessageEnd, Message: ai.Assistant(text.String(), ai.StopStop)})
+	if h := lipgloss.Height(m.View()); h > 24 {
+		t.Fatalf("after commit view is %d lines", h)
+	}
+	if !strings.Contains(m.transcript(), "line") || !strings.Contains(m.View(), "line") {
+		t.Fatal("finished reply left the frame")
+	}
+	lines := strings.Split(m.View(), "\n")
+	if !strings.Contains(ansi.Strip(lines[len(lines)-1]), "ready") {
+		t.Fatal("footer left the bottom")
 	}
 }
 
@@ -150,11 +154,12 @@ func TestChatShowsToolsAndText(t *testing.T) {
 	got := m.transcript()
 	for _, want := range []string{"Ran write_file", "add.go", "└ wrote add.go", "Added add.go.", "interrupted"} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("scrollback missing %q:\n%s", want, got)
+			t.Fatalf("transcript missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(m.View(), "Added add.go.") {
-		t.Fatal("finished reply still in the live view")
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Added add.go.") || !strings.Contains(view, "interrupted") {
+		t.Fatalf("finished reply left the frame:\n%s", view)
 	}
 }
 
@@ -174,6 +179,40 @@ func TestExitClearsTheLiveView(t *testing.T) {
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatalf("quit command was %T", cmd())
+	}
+}
+
+func TestCtrlDQuitsWhenIdle(t *testing.T) {
+	m := newChat(nil, nil)
+	m.resize(40, 12)
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(chatModel)
+	if !m.quitting || m.View() != "" {
+		t.Fatal("ctrl-d did not quit")
+	}
+	if cmd == nil {
+		t.Fatal("missing quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("quit command was %T", cmd())
+	}
+
+	m = newChat(nil, nil)
+	m.resize(40, 12)
+	m.comp.insert("keep")
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(chatModel)
+	if m.quitting || cmd != nil {
+		t.Fatal("ctrl-d quit with text in the composer")
+	}
+
+	m = newChat(nil, nil)
+	m.resize(40, 12)
+	m.busy = true
+	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = next.(chatModel)
+	if m.quitting || cmd != nil {
+		t.Fatal("ctrl-d quit a running turn")
 	}
 }
 
@@ -245,7 +284,7 @@ func TestChatRunsAWrite(t *testing.T) {
 	got := m.transcript()
 	for _, want := range []string{"> write hello.txt", "Ran write_file", "wrote hello.txt", "Created hello.txt."} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("scrollback missing %q:\n%s", want, got)
+			t.Fatalf("transcript missing %q:\n%s", want, got)
 		}
 	}
 	if strings.Count(got, "> write hello.txt") != 1 {
@@ -254,8 +293,9 @@ func TestChatRunsAWrite(t *testing.T) {
 	if m.busy {
 		t.Fatal("chat still busy")
 	}
-	if strings.Contains(m.View(), "Created hello.txt.") {
-		t.Fatal("finished reply still in the live view")
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Created hello.txt.") || !strings.Contains(view, askPlaceholder) {
+		t.Fatalf("finished frame:\n%s", view)
 	}
 }
 
@@ -352,6 +392,116 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 		if w := ansi.StringWidth(line); w > 20 {
 			t.Fatalf("resized live view is %d cols: %q", w, line)
 		}
+	}
+}
+
+func TestTranscriptScroll(t *testing.T) {
+	m := newChat(nil, nil)
+	m.resize(80, 24)
+	var text strings.Builder
+	for i := range 80 {
+		text.WriteString("row-")
+		if i < 10 {
+			text.WriteByte('0')
+		}
+		text.WriteString(strconv.Itoa(i))
+		text.WriteByte('\n')
+	}
+	m.addBlock(kindAssistant, text.String())
+
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, "row-00") {
+		t.Fatal("following frame still shows the oldest row")
+	}
+	if !strings.Contains(view, "row-79") {
+		t.Fatalf("following frame missing the tail:\n%s", view)
+	}
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 24 {
+		t.Fatalf("frame is %d lines", len(lines))
+	}
+	if !strings.Contains(ansi.Strip(lines[len(lines)-1]), "ready") {
+		t.Fatal("footer left the bottom")
+	}
+
+	room := m.transcriptRows()
+	n := len(m.historyLines())
+	start := m.viewTop(n, room)
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	m = next.(chatModel)
+	if moved := start - m.viewTop(n, room); moved != room-1 {
+		t.Fatalf("page up moved %d lines, want %d", moved, room-1)
+	}
+	if m.follow {
+		t.Fatal("page up stayed pinned to the tail")
+	}
+	up := ansi.Strip(m.View())
+	if strings.Contains(up, "row-79") {
+		t.Fatal("page up did not leave the tail")
+	}
+	if up == view {
+		t.Fatal("page up did not change the frame")
+	}
+	paged := strings.Split(m.View(), "\n")
+	if !strings.Contains(ansi.Strip(paged[len(paged)-1]), "ready") || !strings.Contains(ansi.Strip(m.View()), askPlaceholder) {
+		t.Fatal("paging moved the composer or the footer")
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(chatModel)
+	if !m.follow || !strings.Contains(ansi.Strip(m.View()), "row-79") {
+		t.Fatal("esc did not return to the tail")
+	}
+
+	next, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
+	m = next.(chatModel)
+	if m.follow || strings.Contains(ansi.Strip(m.View()), "row-79") {
+		t.Fatal("wheel up did not scroll one row")
+	}
+	next, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	m = next.(chatModel)
+	if !m.follow || !strings.Contains(ansi.Strip(m.View()), "row-79") {
+		t.Fatal("wheel down did not resume following")
+	}
+
+	m.follow = false
+	m.top = 0
+	held := ansi.Strip(m.View())
+	m.addBlock(kindInfo, "NEW-TAIL-LINE")
+	if strings.Contains(ansi.Strip(m.View()), "NEW-TAIL-LINE") {
+		t.Fatal("a scrolled frame followed new output")
+	}
+	if !strings.Contains(held, "row-00") && !strings.Contains(ansi.Strip(m.View()), "row-0") {
+		t.Fatal("reading position moved")
+	}
+	m.follow = true
+	if !strings.Contains(ansi.Strip(m.View()), "NEW-TAIL-LINE") {
+		t.Fatal("following frame missed new output")
+	}
+
+	m.follow = false
+	m.top = 0
+	m.busy = true
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if next.(chatModel).follow {
+		t.Fatal("esc while busy jumped to the tail")
+	}
+
+	m = newChat(nil, nil)
+	m.resize(80, 24)
+	m.addBlock(kindAssistant, text.String())
+	m.follow = false
+	m.top = 0
+	reply := make(chan bool, 1)
+	m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
+	m.busy = true
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(chatModel)
+	if m.follow || m.ask != nil {
+		t.Fatal("esc during confirm jumped or left the prompt open")
+	}
+	if <-reply {
+		t.Fatal("esc allowed the command")
 	}
 }
 
