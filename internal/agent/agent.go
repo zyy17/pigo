@@ -21,6 +21,7 @@ type Config struct {
 	Tools        []Tool
 	Stream       ai.StreamFunc
 	MaxTurns     int
+	Before       BeforeToolCall
 }
 
 // Agent runs the tool loop. Prompt is not safe for concurrent use.
@@ -29,6 +30,7 @@ type Agent struct {
 	state    State
 	stream   ai.StreamFunc
 	maxTurns int
+	before   BeforeToolCall
 	subs     []func(Event)
 
 	mu     sync.Mutex
@@ -55,6 +57,7 @@ func New(cfg Config) (*Agent, error) {
 		},
 		stream:   cfg.Stream,
 		maxTurns: cfg.MaxTurns,
+		before:   cfg.Before,
 	}, nil
 }
 
