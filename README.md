@@ -148,7 +148,7 @@ The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They ch
 | `PIGO_PROVIDER` | Chat backend. `openai` is an OpenAI-compatible chat-completions endpoint | `openai` |
 | `OPENAI_API_KEY` | Bearer token when the provider is `openai` | required |
 | `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-4o-mini` |
+| `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-5.6-luna` |
 | `PIGO_YOLO` | `1` or `true` runs dangerous shell commands without asking | off |
 
 Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), and `--yolo` override the environment. The API key stays out of the flags so it does not land in shell history.
@@ -159,7 +159,7 @@ Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspac
 provider: openai
 api_key: sk-...
 base_url: https://api.openai.com/v1
-model: gpt-4o-mini
+model: gpt-5.6-luna
 workspace: .
 ```
 
