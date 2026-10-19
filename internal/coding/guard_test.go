@@ -46,6 +46,11 @@ func TestRiskyCommand(t *testing.T) {
 		"echo x >/dev/nvme0n1",
 		"true && rm -rf /",
 		"FOO=bar rm -rf /",
+		"cat x | sudo tee /etc/a",
+		"yes | rm -rf ~",
+		"true & rm -rf /",
+		"dd if=/dev/zero of=/dev/sda 2>&1",
+		"echo x > /dev/sda 2>&1",
 	}
 	safe := []string{
 		"rm -rf ./build",
@@ -70,6 +75,9 @@ func TestRiskyCommand(t *testing.T) {
 		`echo "a && rm -rf /"`,
 		"echo x > /tmp/out",
 		"ls /",
+		"(rm -rf /)",
+		`echo "true & rm -rf /"`,
+		"echo ok && true",
 	}
 	for _, cmd := range dangerous {
 		if reason, ok := riskyCommand(cmd); !ok {

@@ -13,9 +13,19 @@ func riskyCommand(command string) (string, bool) {
 	if strings.Contains(compact(command), ":(){:|:&};:") {
 		return "fork bomb", true
 	}
-	for _, seg := range split(tokens(command), ";", "\n", "&&", "||") {
-		if reason, ok := riskySegment(seg); ok {
-			return reason, true
+	for _, seg := range split(tokens(command), ";", "\n", "&&", "||", "&") {
+		// A pipe into a shell, and a redirect onto a disk, are properties
+		// of the whole segment. Command rules run on each pipe stage.
+		if pipeToShell(seg) {
+			return "pipe into a shell", true
+		}
+		if redirectToDisk(seg) {
+			return "redirect to a disk device", true
+		}
+		for _, stage := range split(seg, "|") {
+			if reason, ok := riskyStage(stage); ok {
+				return reason, true
+			}
 		}
 	}
 	return "", false
@@ -30,13 +40,7 @@ func compact(s string) string {
 	}, s)
 }
 
-func riskySegment(toks []string) (string, bool) {
-	if pipeToShell(toks) {
-		return "pipe into a shell", true
-	}
-	if redirectToDisk(toks) {
-		return "redirect to a disk device", true
-	}
+func riskyStage(toks []string) (string, bool) {
 	name, args := commandWord(toks)
 	switch {
 	case name == "sudo":
@@ -294,6 +298,9 @@ func tokens(command string) []string {
 			flush()
 			i++
 			out = append(out, "&&")
+		case c == '&':
+			flush()
+			out = append(out, "&")
 		case c == '|' && i+1 < len(r) && r[i+1] == '|':
 			flush()
 			i++
