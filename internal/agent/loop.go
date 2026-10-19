@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -166,7 +165,6 @@ func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 }
 
 func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
-	call.Arguments = normalizeArgs(call.Arguments)
 	if a.before != nil {
 		d, err := a.before(ctx, call)
 		if err != nil {
@@ -210,8 +208,7 @@ func (a *Agent) blockCall(call ai.ToolCall, reason string) {
 
 // skipCall pairs a call that will not run with an error result.
 func (a *Agent) skipCall(call ai.ToolCall, text string) {
-	args := normalizeArgs(call.Arguments)
-	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
+	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: call.Arguments})
 	a.appendResult(call, text, true)
 }
 
@@ -274,17 +271,6 @@ func (a *Agent) callTool(ctx context.Context, call ai.ToolCall) (string, bool) {
 		return err.Error(), true
 	}
 	return out, false
-}
-
-// normalizeArgs fills an empty payload so a tool can decode JSON.
-// The stream accumulator already writes "{}". This copy stays for a
-// custom StreamFunc that leaves Arguments empty.
-func normalizeArgs(raw []byte) []byte {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return []byte("{}")
-	}
-	return raw
 }
 
 const invalidArgRunes = 200
