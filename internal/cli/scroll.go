@@ -124,5 +124,8 @@ func (m *chatModel) historyParts(includeLive bool) []string {
 	if includeLive && strings.TrimSpace(m.live) != "" {
 		parts = append(parts, m.paintAssistant(m.live))
 	}
+	if line := m.queuedLine(); line != "" {
+		parts = append(parts, line)
+	}
 	return parts
 }

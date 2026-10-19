@@ -55,6 +55,7 @@ type chatModel struct {
 	ready            bool
 	busy             bool
 	quitting         bool
+	queued           string
 	ask              *confirmReq
 	suggestDismissed bool
 	// scroll is the first visible transcript line. Negative follows the tail.
@@ -125,8 +126,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
 	case streamMsg:
-		m.apply(msg.event)
-		return m, nil
+		return m, m.apply(msg.event)
 	case confirmMsg:
 		m.ask = msg.req
 		return m, nil
@@ -143,7 +143,7 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *chatModel) onPaste(text string) {
-	if m.busy || m.ask != nil || text == "" {
+	if m.ask != nil || text == "" {
 		return
 	}
 	m.comp.insert(text)
@@ -198,11 +198,11 @@ func (m *chatModel) runPrompt(text string) tea.Cmd {
 	}
 }
 
-func (m *chatModel) apply(ev agent.Event) {
+func (m *chatModel) apply(ev agent.Event) tea.Cmd {
 	switch ev.Type {
 	case agent.MessageUpdate:
 		if ev.TextDelta == "" {
-			return
+			return nil
 		}
 		m.live += ev.TextDelta
 	case agent.MessageEnd:
@@ -215,7 +215,9 @@ func (m *chatModel) apply(ev agent.Event) {
 	case agent.AgentEnd:
 		m.busy = false
 		m.noteEnd(ev.Err)
+		return m.takeQueue(ev.Err)
 	}
+	return nil
 }
 
 func (m *chatModel) finishMessage(msg ai.Message) {

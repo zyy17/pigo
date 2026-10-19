@@ -56,7 +56,7 @@ Short history stays at the top of the pane. The spare rows sit above the compose
 
 ## A turn
 
-Enter commits the composer, clears it, and calls `Session.Prompt`. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
+Enter commits the composer, clears it, and calls `Session.Prompt`. While a turn is running the composer stays editable, and Enter queues one follow-up instead of dropping it. A second Enter appends a newline to that same message. The transcript shows it as one dim line, `↳ queued:`. `AgentEnd` sends the queue when the turn finishes, and puts it back in the composer after an interrupt or an error. `/exit` aborts and quits. `/reset` is refused until the turn ends. `/skill:name` queues like plain text. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
 
 ```mermaid
 stateDiagram-v2
@@ -77,21 +77,23 @@ Esc during a turn calls `Abort`. Esc on the confirm panel only denies that comma
 | Key | When | What |
 | --- | --- | --- |
 | Enter | idle | send, or complete a partial slash command; a full command name is sent |
+| Enter | running | queue one follow-up; a second Enter appends a newline to it |
 | Tab | slash menu open | complete the selected item and never send |
-| Shift+Enter, Alt+Enter, Ctrl+J | idle | insert a newline |
-| Enter after a trailing `\` | idle | newline, and drop that backslash |
-| Esc | running | interrupt |
+| Shift+Enter, Alt+Enter, Ctrl+J | idle or running | insert a newline |
+| Enter after a trailing `\` | idle or running | newline, and drop that backslash |
+| Esc | running | interrupt, even if the slash menu is open |
 | Esc | confirm | deny |
 | Esc | idle, scrolled, menu closed | jump back to the tail |
-| Esc | slash menu | dismiss the menu |
+| Esc | slash menu | dismiss the menu (idle only) |
 | PgUp, PgDn | any time | one page, one line of overlap |
 | wheel | any time | one line |
 | Ctrl-C | running | abort; also denies a confirm |
 | Ctrl-C | idle | quit |
 | Ctrl-D | idle, empty composer | quit |
-| Ctrl-U | idle | clear the whole composer |
-| Ctrl-W | idle | delete the word before the caret |
-| arrows, Home, End | idle | move the caret; Up and Down move the menu |
+| Ctrl-D | running | nothing |
+| Ctrl-U | idle or running | clear the whole composer |
+| Ctrl-W | idle or running | delete the word before the caret |
+| arrows, Home, End | idle or running | move the caret; Up and Down move the menu |
 
 Bubble Tea asks the terminal for keyboard disambiguation and turns it off on quit. Terminals that answer deliver Shift+Enter as its own key. The others still have Ctrl+J, Alt+Enter, and the trailing backslash.
 
