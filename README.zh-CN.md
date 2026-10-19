@@ -10,12 +10,12 @@ pigo 是一个小型 Go 编码代理。它和一个兼容 OpenAI 的模型对话
 
 ```mermaid
 flowchart TD
-    cli["CLI 会话"]
-    coding["internal/coding<br/>对应 Pi pi-coding-agent"]
+    cli["CLI<br/>会话"]
+    coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
-    agent["internal/agent<br/>对应 Pi pi-agent-core"]
-    ai["internal/ai<br/>对应 Pi pi-ai"]
-    http["兼容 OpenAI 的 HTTP"]
+    agent["internal/agent<br/>pi-agent-core"]
+    ai["internal/ai<br/>pi-ai"]
+    http["OpenAI<br/>HTTP"]
     cli --> coding
     coding --> skills
     coding --> agent
@@ -45,8 +45,8 @@ sequenceDiagram
     participant Model as 模型
     participant Tools as 工具
     User->>Agent: 提示
-    loop 直到模型停止
-        Agent->>Model: 系统提示、会话记录、工具 schema
+    loop 停止前
+        Agent->>Model: 记录
         Model-->>Agent: 助手消息
         Agent->>Tools: 工具调用
         Tools-->>Agent: 工具结果

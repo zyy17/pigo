@@ -13,7 +13,7 @@ flowchart TD
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
-    http["OpenAI-compatible HTTP"]
+    http["OpenAI<br/>HTTP"]
     cli --> coding
     coding --> skills
     coding --> agent
@@ -50,11 +50,11 @@ sequenceDiagram
     participant Tools
     User->>Agent: prompt
     loop one model call per pass
-        Agent->>Model: system prompt, transcript, tool schemas
-        Model-->>Agent: assistant message
+        Agent->>Model: prompt and tools
+        Model-->>Agent: assistant text
         alt tool calls
             Agent->>Tools: one call
-            Tools-->>Agent: one result with the same call ID
+            Tools-->>Agent: one result
         end
     end
     Agent-->>User: final text
@@ -81,7 +81,7 @@ sequenceDiagram
     Agent->>Hook: BeforeToolCall
     alt blocked
         Hook-->>Agent: reason
-        Agent-->>Model: tool result, blocked
+        Agent-->>Model: blocked
     else allowed
         Hook-->>Agent: allow
         Agent->>Tools: execute
@@ -146,12 +146,12 @@ The wordmark, a bordered session card, and the turns are drawn in the transcript
 ```mermaid
 flowchart TD
     start["session start"]
-    userDir["scan ~/.pi/agent/skills"]
-    projectDir["scan workspace/.pi/skills"]
-    list["keep the first skill of each name"]
-    prompt["system prompt lists name, description, and path"]
-    read["model calls read_file when the task matches"]
-    command["/skill:name pastes SKILL.md into the user message"]
+    userDir["user skills<br/>~/.pi/agent/skills"]
+    projectDir["project skills<br/>.pi/skills"]
+    list["first name<br/>wins"]
+    prompt["list skills<br/>in the prompt"]
+    read["read_file"]
+    command["/skill:name"]
     start --> userDir --> projectDir --> list --> prompt
     prompt --> read
     prompt --> command
