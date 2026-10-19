@@ -160,7 +160,10 @@ func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 			a.abortRemaining(calls[i:])
 			return err
 		}
-		a.runOneTool(ctx, call)
+		if err := a.runOneTool(ctx, call); err != nil {
+			a.abortRemaining(calls[i+1:])
+			return err
+		}
 		if err := ctx.Err(); err != nil {
 			a.abortRemaining(calls[i+1:])
 			return err
@@ -169,11 +172,51 @@ func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 	return nil
 }
 
-func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) {
+func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 	args := normalizeArgs(call.Arguments)
+	call.Arguments = args
+	if a.before != nil {
+		d, err := a.before(ctx, call)
+		if err != nil {
+			return a.finishHook(call, args, err)
+		}
+		if d.Block {
+			a.blockCall(call, args, d.Reason)
+			return nil
+		}
+		if d.Args != nil {
+			args = d.Args
+			call.Arguments = args
+		}
+	}
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
 	text, isErr := a.callTool(ctx, call, args)
 	a.appendResult(call, text, isErr)
+	return nil
+}
+
+// finishHook records the hook error as this call's result.
+// A canceled hook stops the turn. Any other error stays on this call so the
+// model can continue.
+func (a *Agent) finishHook(call ai.ToolCall, args []byte, err error) error {
+	text := err.Error()
+	if errors.Is(err, context.Canceled) {
+		text = "aborted"
+	}
+	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
+	a.appendResult(call, text, true)
+	if errors.Is(err, context.Canceled) {
+		return context.Canceled
+	}
+	return nil
+}
+
+func (a *Agent) blockCall(call ai.ToolCall, args []byte, reason string) {
+	if reason == "" {
+		reason = "blocked"
+	}
+	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
+	a.appendResult(call, "blocked: "+reason, true)
 }
 
 // closeCalls records a result for tool calls that will not run.
