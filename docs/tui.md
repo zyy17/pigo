@@ -85,7 +85,6 @@ Esc during a turn calls `Abort`. Esc on the confirm panel only denies that comma
 | Enter after a trailing `\` | idle or running | newline, and drop that backslash |
 | Esc | running | interrupt, even if the slash menu is open |
 | keys, paste | confirm | go to the prompt, not the composer; Enter or `y` allows, Esc or `n` denies |
-| Esc | confirm | deny |
 | Esc | idle, scrolled, menu closed | jump back to the tail |
 | Esc | slash menu | dismiss the menu (idle only) |
 | PgUp, PgDn | any time | one page, one line of overlap |
