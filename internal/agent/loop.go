@@ -166,8 +166,7 @@ func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 }
 
 func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
-	args := normalizeArgs(call.Arguments)
-	call.Arguments = args
+	call.Arguments = normalizeArgs(call.Arguments)
 	if a.before != nil {
 		d, err := a.before(ctx, call)
 		if err != nil {
@@ -178,12 +177,11 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 			return nil
 		}
 		if d.Args != nil {
-			args = d.Args
-			call.Arguments = args
+			call.Arguments = d.Args
 		}
 	}
-	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-	text, isErr := a.callTool(ctx, call, args)
+	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: call.Arguments})
+	text, isErr := a.callTool(ctx, call)
 	a.appendResult(call, text, isErr)
 	return nil
 }
@@ -229,7 +227,7 @@ func (a *Agent) closeCalls(msg ai.Message) {
 		text = "not executed"
 	}
 	for _, call := range msg.ToolCalls {
-		a.appendResult(call, text, true)
+		a.skipCall(call, text)
 	}
 }
 
@@ -257,8 +255,8 @@ func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
 	a.emit(Event{Type: MessageEnd, Message: msg})
 }
 
-func (a *Agent) callTool(ctx context.Context, call ai.ToolCall, args []byte) (string, bool) {
-	if !json.Valid(args) {
+func (a *Agent) callTool(ctx context.Context, call ai.ToolCall) (string, bool) {
+	if !json.Valid(call.Arguments) {
 		return "invalid tool arguments: " + clip(string(call.Arguments), invalidArgRunes), true
 	}
 	tool, ok := a.state.tool(call.Name)
@@ -268,7 +266,7 @@ func (a *Agent) callTool(ctx context.Context, call ai.ToolCall, args []byte) (st
 	if tool.Execute == nil {
 		return fmt.Sprintf("tool %q has no execute function", call.Name), true
 	}
-	out, err := tool.Execute(ctx, args)
+	out, err := tool.Execute(ctx, call.Arguments)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return "aborted", true
@@ -278,6 +276,9 @@ func (a *Agent) callTool(ctx context.Context, call ai.ToolCall, args []byte) (st
 	return out, false
 }
 
+// normalizeArgs fills an empty payload so a tool can decode JSON.
+// The stream accumulator already writes "{}". This copy stays for a
+// custom StreamFunc that leaves Arguments empty.
 func normalizeArgs(raw []byte) []byte {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
