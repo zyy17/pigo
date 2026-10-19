@@ -16,7 +16,7 @@ import (
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
 	"github.com/zyy17/pigo/internal/config"
-	"github.com/zyy17/pigo/internal/linebuf"
+	"github.com/zyy17/pigo/internal/defaults"
 )
 
 const version = "0.1.0"
@@ -87,14 +87,14 @@ func usageText() string {
 Environment:
   PIGO_PROVIDER     chat backend (default openai)
   OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
-  OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
+  OPENAI_BASE_URL   OpenAI-compatible API root (default %s)
   OPENAI_MODEL      model name that endpoint accepts (default %s)
   PIGO_YOLO         set to 1 or true to skip the dangerous-command check
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
 A yolo: true key in those files skips the same check.
 Precedence is flags, then the environment, then .env, then those files, then defaults.
-`, sessionHelp(), config.DefaultModel)
+`, sessionHelp(), config.DefaultBaseURL, config.DefaultModel)
 }
 
 // Run parses args and starts a session.
@@ -127,7 +127,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd.Flags().StringVarP(&flags.Prompt, "print", "p", "", "run one prompt and exit")
 	cmd.Flags().StringVarP(&flags.Workspace, "workspace", "w", "", "workspace directory (default: current directory)")
 	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or "+config.DefaultModel+")")
-	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
+	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or "+config.DefaultBaseURL+")")
 	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "run dangerous shell commands without asking")
 	return cmd
 }
@@ -181,7 +181,7 @@ func (a *app) repl() error {
 	fmt.Fprintln(a.out, "Enter a task. "+hintText())
 	sc := bufio.NewScanner(a.in)
 	// The default token limit is 64KiB, which rejects a long pasted task.
-	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
+	sc.Buffer(make([]byte, 0, defaults.LineStart), defaults.LineMax)
 	for {
 		fmt.Fprint(a.out, "you> ")
 		if !sc.Scan() {

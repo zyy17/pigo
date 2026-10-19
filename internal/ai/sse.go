@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/zyy17/pigo/internal/linebuf"
+	"github.com/zyy17/pigo/internal/defaults"
 )
 
 // parseSSE reads a chat-completions event stream and sends ai events.
@@ -15,7 +15,7 @@ import (
 func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 	acc := &accumulator{}
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
+	sc.Buffer(make([]byte, 0, defaults.LineStart), defaults.LineMax)
 	for sc.Scan() {
 		if err := ctx.Err(); err != nil {
 			sendStreamError(out, err, acc.message())

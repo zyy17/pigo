@@ -3,7 +3,6 @@
 package config
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -15,12 +14,15 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 
-	"github.com/zyy17/pigo/internal/linebuf"
+	builtin "github.com/zyy17/pigo/internal/defaults"
 )
 
-// DefaultModel is the built-in model name. The CLI help text uses this
-// same constant. coding keeps its own fallback so it does not import config.
-const DefaultModel = "gpt-5.6-luna"
+const (
+	// DefaultModel is the built-in model name.
+	DefaultModel = builtin.Model
+	// DefaultBaseURL is the OpenAI-compatible API root.
+	DefaultBaseURL = builtin.BaseURL
+)
 
 // Config is every setting the CLI needs. Prompt comes from flags only.
 type Config struct {
@@ -55,9 +57,7 @@ func Load(flags Config) (Config, error) {
 	if err := loadFile(k, "pigo.yaml"); err != nil {
 		return Config{}, err
 	}
-	// Snapshot the process environment before .env. loadDotEnv copies .env
-	// into empty process variables for the shell tool. Loading this snapshot
-	// afterwards is what makes a real process value win over .env.
+	// The process map is applied after .env, so a real environment value wins.
 	env := envMap()
 	if err := loadDotEnv(k, ".env"); err != nil {
 		return Config{}, err
@@ -90,7 +90,7 @@ func (cfg Config) trimmed() Config {
 func defaults() map[string]any {
 	return map[string]any{
 		"provider":  "openai",
-		"base_url":  "https://api.openai.com/v1",
+		"base_url":  DefaultBaseURL,
 		"model":     DefaultModel,
 		"workspace": ".",
 	}
@@ -127,16 +127,7 @@ func loadMap(k *koanf.Koanf, values map[string]any) error {
 }
 
 func envMap() map[string]any {
-	out := map[string]any{}
-	for envKey, name := range envNames {
-		if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
-			out[name] = v
-		}
-	}
-	if yoloOn(os.Getenv("PIGO_YOLO")) {
-		out["yolo"] = true
-	}
-	return out
+	return overlay(os.Getenv)
 }
 
 func yoloOn(v string) bool {
@@ -165,52 +156,4 @@ func flagMap(flags Config) map[string]any {
 		out["yolo"] = true
 	}
 	return out
-}
-
-func loadDotEnv(k *koanf.Koanf, path string) error {
-	vals, err := readDotEnv(path)
-	if err != nil || len(vals) == 0 {
-		return err
-	}
-	overlay := map[string]any{}
-	for key, val := range vals {
-		val = strings.TrimSpace(val)
-		if val == "" {
-			continue
-		}
-		if os.Getenv(key) == "" {
-			if err := os.Setenv(key, val); err != nil {
-				return err
-			}
-		}
-		if name, ok := envNames[key]; ok {
-			overlay[name] = val
-		}
-		if key == "PIGO_YOLO" && yoloOn(val) {
-			overlay["yolo"] = true
-		}
-	}
-	return loadMap(k, overlay)
-}
-
-func readDotEnv(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	out := map[string]string{}
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
-	for sc.Scan() {
-		key, val, ok := parseEnvLine(sc.Text())
-		if ok {
-			out[key] = val
-		}
-	}
-	return out, sc.Err()
 }

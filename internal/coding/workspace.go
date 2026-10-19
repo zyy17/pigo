@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/zyy17/pigo/internal/skills"
 )
 
 // Workspace is a directory the coding tools are allowed to touch.
@@ -70,7 +68,18 @@ func (w *Workspace) Resolve(path string) (string, error) {
 }
 
 func (w *Workspace) withinRoot(path string) bool {
-	return skills.Within(w.root, path)
+	return within(w.root, path)
+}
+
+func within(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // nearestExisting resolves symlinks without requiring the final element to exist.
@@ -121,7 +130,7 @@ func resolveSkillPath(path string, roots []string) (string, error) {
 		if err != nil {
 			continue
 		}
-		if skills.Within(resolvedRoot, resolved) {
+		if within(resolvedRoot, resolved) {
 			return resolved, nil
 		}
 	}
