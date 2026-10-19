@@ -86,9 +86,9 @@ func runTUI(session *coding.Session) error {
 	session.Subscribe(func(ev agent.Event) {
 		program.Send(streamMsg{event: ev})
 	})
-	session.SetConfirm(func(ctx context.Context, command, reason string) (bool, error) {
+	session.SetConfirm(func(ctx context.Context, prompt coding.Confirm) (bool, error) {
 		reply := make(chan bool, 1)
-		program.Send(confirmMsg{req: &confirmReq{command: command, reason: reason, reply: reply}})
+		program.Send(confirmMsg{req: confirmRequest(prompt, reply)})
 		select {
 		case ok := <-reply:
 			return ok, nil

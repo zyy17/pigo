@@ -112,14 +112,19 @@ make build
 A terminal opens the chat on the alternate screen. The keys are in [docs/tui.md](docs/tui.md).
 
 - Enter sends. Esc or Ctrl-C cancels the turn. While a turn runs the composer stays editable, and Enter queues one follow-up message (Esc interrupts).
-- A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check.
+- A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking.
+- `write_file` and `edit_file` show a diff first, with the same keys. A denial comes back as `blocked:`, and the turn continues. `-p` and the line session deny the change (`blocked: file change needs review`) because they have no screen.
+- `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips both questions. One switch means the session does not ask, so a one-shot edit also skips the command check.
 - `/skill:name` loads a skill, `/reset` clears the live transcript and starts a new session file, and `/exit` quits.
 - Quitting leaves the alternate screen. A pipe uses the line session and does not change the screen.
 
 One task, then exit:
 
 ```bash
-./pigo -p "Create hello.txt that says hi, then read it back"
+./pigo -p "Create hello.txt that says hi"
+# refuses the write; there is no one to ask
+
+./pigo --yolo -p "Create hello.txt that says hi, then read it back"
 ./pigo -w ~/src/app -p "Summarize the Go files in this directory"
 ```
 
@@ -167,7 +172,7 @@ The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They ch
 | `OPENAI_API_KEY` | Bearer token when the provider is `openai` | required |
 | `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-5.6-luna` |
-| `PIGO_YOLO` | `1` or `true` runs dangerous shell commands without asking | off |
+| `PIGO_YOLO` | `1` or `true` applies file changes and dangerous shell commands without asking | off |
 | `PIGO_SESSION_DIR` | Directory for session files | `~/.pigo/sessions` |
 
 Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), `--yolo`, `--continue` (`-c`), `--session`, `--no-session`, and `--session-dir` override the environment. `-c`, `--session`, and `--no-session` cannot be combined. The API key stays out of the flags so it does not land in shell history.
@@ -182,7 +187,14 @@ model: gpt-5.6-luna
 workspace: .
 ```
 
-A one-shot run prints the same stream the chat shows:
+A one-shot run prints the same stream the chat shows. Without `--yolo` a file change stops before it writes:
+
+```text
+→ write_file {"path":"hello.txt","content":"hi"}
+✗ blocked: file change needs review
+```
+
+`--yolo` applies it:
 
 ```text
 → write_file {"path":"hello.txt","content":"hi"}

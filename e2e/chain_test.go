@@ -35,7 +35,7 @@ func TestToolChainPairsResults(t *testing.T) {
 		}}},
 		{Text: "done"},
 	})
-	session := newSession(t, dir, srv.URL+"/v1")
+	session := openSession(t, dir, srv.URL+"/v1", true)
 	if err := session.Prompt(context.Background(), "edit the note, then run a command"); err != nil {
 		t.Fatal(err)
 	}
@@ -140,12 +140,18 @@ func TestAbortDuringToolAndDuringStream(t *testing.T) {
 
 func newSession(t *testing.T, dir, base string) *coding.Session {
 	t.Helper()
+	return openSession(t, dir, base, false)
+}
+
+func openSession(t *testing.T, dir, base string, yolo bool) *coding.Session {
+	t.Helper()
 	session, err := coding.New(coding.Config{
 		APIKey:        "test-key",
 		BaseURL:       base,
 		Model:         "test-model",
 		Workspace:     dir,
 		UserSkillsDir: t.TempDir(),
+		Yolo:          yolo,
 	})
 	if err != nil {
 		t.Fatal(err)

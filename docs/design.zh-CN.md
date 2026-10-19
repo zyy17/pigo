@@ -177,9 +177,37 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过检查。聊天画面和行会话共用一张命令表：`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。
+Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过这次检查和[文件改动确认](#文件改动确认)。聊天画面和行会话共用一张命令表：`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。
 
 这是一张模式拒绝表。脚本、编码、别名、`git -C`、`(rm -rf /)` 或 `$(…)` 这样的子 shell，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
+
+## 文件改动确认
+
+`write_file` 和 `edit_file` 在写入之前，由 `internal/coding` 生成统一 diff。用的是和命令检查同一个 `BeforeToolCall`。代理核心仍然没有自己的策略。无法落地的调用（找不到原文、路径在工作区外、参数不对）不进入确认，由 `Execute` 返回那个错误。字节完全相同也不确认，写入仍然发生。
+
+在聊天里，工作行换成这份 diff。新增和删除用颜色标出。面板保留前 8 行，其余用一个计数带过。文件长到放不进行差分表时，只显示两边各自的开头。已有文件超过工具的读取上限，或不是合法 UTF-8 时，不做逐行 diff：面板写出原因，并给出新文本。
+
+```text
+! allow this edit?
+--- a/hello.txt
++++ b/hello.txt
+@@ -1,1 +1,1 @@
+-alpha
++beta
+hello.txt
+enter allow · esc deny
+```
+
+Enter 或 `y` 写入。Esc 或 `n` 不写。工具结果是 `blocked: file change denied`，这一轮继续。Ctrl-C 会先拒绝，再中止这一轮。
+
+`-p` 和行会话没有画面，所以拒绝（`blocked: file change needs review`）。`--yolo` 同时跳过这次确认和命令检查。
+
+| 题目 | 选择 | 另一条路 | 原因 |
+| --- | --- | --- | --- |
+| 谁来问 | 聊天画面，通过 `SetConfirm` | 代理核心 | 核心不带策略。coding 决定什么需要看，画面负责画 |
+| 没有画面 | 拒绝 | 直接写入 | 和危险命令同一条规则。用户看不见的写入不应落地 |
+| 跳过 | `--yolo` 同时跳过文件确认和命令检查 | 再做一个只放行文件的开关 | 一个开关表示「不再询问」。`-p` 从不询问，所以不能一边写文件、一边仍询问命令 |
+| Shell | 只覆盖文件工具 | 连重定向一起确认 | `printf > file` 仍然能写。这不是沙箱 |
 
 ## 测试
 
@@ -189,7 +217,7 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。`.env` 和技能前言各自去掉一对引号。`.env` 只填补进程里还没有的变量，给 shell 工具用，不会覆盖已经设置的变量。进程环境在 `.env` 之后再写入，所以进程里的值仍然胜过 `.env`。
 
-从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`、`PIGO_SESSION_DIR`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过危险命令检查，`-c` / `--session` 恢复一个会话文件。`--no-session` 让这一次只留在内存里。
+从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`、`PIGO_SESSION_DIR`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过文件改动确认和危险命令检查，`-c` / `--session` 恢复一个会话文件。`--no-session` 让这一次只留在内存里。
 
 一次聊天请求只发送 `model`、`messages`、`tools` 和 `stream`。它不发送 `max_tokens`、`temperature` 或 `top_p`。GPT-5 推理模型会拒绝这些字段；不发送它们，其他兼容 OpenAI 的提供者也继续用自己的默认值。
 
@@ -199,7 +227,7 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 `Workspace.Resolve` 把路径从工作区根目录变成绝对路径，跟随符号链接，并拒绝根目录之外的目标。检查用的是解析之后的路径，所以项目内部的链接不能指向外面的文件。
 
-`read_file` 多一条许可。工作区检查失败后，它仍可以打开已发现技能目录中的文件。`~/.pi/agent/skills` 里的技能就是这样被读到的。`write_file` 和 `edit_file` 没有这条许可。
+`read_file` 多一条许可。工作区检查失败后，它仍可以打开已发现技能目录中的文件。`~/.pi/agent/skills` 里的技能就是这样被读到的。`write_file` 和 `edit_file` 没有这条许可。它们在写入前要经过[文件改动确认](#文件改动确认)。
 
 `run_command` 以工作区为当前目录启动 `bash`。Unix 上需要安装 bash。Windows 上用 `cmd /C`。它是普通进程。过长的输出保留末尾。环境里的 `OPENAI_API_KEY` 会被去掉。[危险命令](#危险命令) 里的拒绝表可以在进程启动前拦住这条命令。
 

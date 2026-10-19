@@ -65,7 +65,7 @@ A resumed session is drawn before the first frame. `newChat` copies the saved me
 stateDiagram-v2
     [*] --> Idle
     Idle --> Running: Enter
-    Running --> Confirm: denylist
+    Running --> Confirm: denylist or file change
     Confirm --> Running: allow
     Confirm --> Running: deny
     Running --> Idle: done
@@ -74,7 +74,7 @@ stateDiagram-v2
     Idle --> [*]: quit
 ```
 
-Esc during a turn calls `Abort`. Esc on the confirm panel only denies that command; the turn continues and the tool result is `blocked:`. Ctrl-C denies on the way out and aborts. `--yolo` never sends `confirmMsg`. `-p` and the line session deny instead of asking, because they have no screen to ask on.
+Esc during a turn calls `Abort`. Esc on the confirm panel only denies that call; the turn continues and the tool result is `blocked:`. Ctrl-C denies on the way out and aborts. `--yolo` never sends `confirmMsg`. `-p` and the line session deny instead of asking, because they have no screen to ask on. A file diff uses the same panel and the same keys. The panel keeps the first 8 lines.
 
 ## Keys
 
@@ -113,6 +113,7 @@ Bubble Tea asks the terminal for keyboard disambiguation and turns it off on qui
 | Resize | Rewrap from the stored source text | Keep the already wrapped lines | The source is the truth. A line offset can drift, which is called out below |
 | Look | Codex-like colors, wordmark, segmented status bar | Copy a larger TUI | crush is a useful reference for how a calm chat feels. None of its code is in this tree |
 | Other modes | `interactiveTerminal` gates `runTUI` | Always draw the TUI | `-p`, a pipe, and the line session print events and exit. They have no cursor and no confirm prompt |
+| File review | Ask in the chat; `-p` denies | Auto-apply when there is no screen | Same rule as the command check. `--yolo` skips both questions |
 
 ## Limits
 
@@ -120,3 +121,6 @@ Bubble Tea asks the terminal for keyboard disambiguation and turns it off on qui
 - Quit prints nothing. Resume from the shell with `--continue` or `--session`. Session token counts stay on the status line and are not saved with the transcript.
 - A scroll offset is a wrapped line. Resizing rewraps from the source, so the same offset can land on a different sentence.
 - Shift+Enter is a plain Enter on terminals that do not answer the keyboard-disambiguation query.
+- The confirm panel shows the first 8 lines of a diff. A longer diff keeps a count.
+- `--yolo` skips file review and the command check together.
+- A shell redirect is not reviewed. `run_command` can still write a file.

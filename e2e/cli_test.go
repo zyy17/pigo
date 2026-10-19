@@ -26,7 +26,7 @@ func TestCLIOneShotRunsTheChain(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
 	t.Setenv("OPENAI_MODEL", "test-model")
 
-	if err := cli.Run([]string{"-w", dir, "-p", "create hello.txt"}); err != nil {
+	if err := cli.Run([]string{"-w", dir, "--yolo", "-p", "create hello.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
@@ -35,6 +35,38 @@ func TestCLIOneShotRunsTheChain(t *testing.T) {
 	}
 	if string(body) != "hi\n" {
 		t.Fatalf("hello.txt %q", body)
+	}
+}
+
+func TestCLIPrintDeniesFileChange(t *testing.T) {
+	dir := t.TempDir()
+	home := t.TempDir()
+	isolateConfig(t, home, dir)
+	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{
+			ID: "call_edit", Name: "edit_file",
+			Args: `{"path":"hello.txt","old_string":"alpha","new_string":"beta"}`,
+		}}},
+		{Text: "stopped"},
+	})
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
+	t.Setenv("OPENAI_MODEL", "test-model")
+
+	if err := cli.Run([]string{"-w", dir, "-p", "edit hello.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
+	if err != nil || string(body) != "alpha\n" {
+		t.Fatalf("hello.txt %q err %v", body, err)
+	}
+	reqs := script.Requests()
+	if len(reqs) < 2 || !strings.Contains(toolText(reqs[1], "call_edit"), "blocked: file change needs review") {
+		t.Fatalf("requests %#v", reqs)
 	}
 }
 
@@ -62,7 +94,7 @@ func TestCLISkillExpandsBeforeTheModel(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
 	t.Setenv("OPENAI_MODEL", "test-model")
 
-	if err := cli.Run([]string{"-w", dir, "-p", "/skill:greet"}); err != nil {
+	if err := cli.Run([]string{"-w", dir, "--yolo", "-p", "/skill:greet"}); err != nil {
 		t.Fatal(err)
 	}
 	reqs := script.Requests()

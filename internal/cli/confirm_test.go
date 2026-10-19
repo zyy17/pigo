@@ -13,9 +13,10 @@ func TestConfirmPrompt(t *testing.T) {
 	m.busy = true
 	reply := make(chan bool, 1)
 	m.ask = &confirmReq{
-		command: "rm -rf /",
-		reason:  "recursive delete of / or home",
-		reply:   reply,
+		title:  "! allow this command?",
+		body:   "rm -rf /",
+		detail: "recursive delete of / or home",
+		reply:  reply,
 	}
 	view := ansi.Strip(m.View().Content)
 	for _, want := range []string{"! allow this command?", "rm -rf /", "recursive delete of / or home", "enter", "esc"} {
@@ -52,7 +53,7 @@ func TestConfirmKeys(t *testing.T) {
 			m := readyChat(t)
 			m.busy = true
 			reply := make(chan bool, 1)
-			m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
+			m.ask = &confirmReq{title: "! allow this command?", body: "sudo true", detail: "sudo", reply: reply}
 			next, _ := m.Update(tc.key)
 			if got := <-reply; got != tc.allow {
 				t.Fatalf("allow %v", got)

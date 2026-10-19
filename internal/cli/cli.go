@@ -92,7 +92,7 @@ Environment:
   OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
   OPENAI_BASE_URL   OpenAI-compatible API root (default %s)
   OPENAI_MODEL      model name that endpoint accepts (default %s)
-  PIGO_YOLO         set to 1 or true to skip the dangerous-command check
+  PIGO_YOLO         set to 1 or true to skip file-change review and the dangerous-command check
   PIGO_SESSION_DIR  directory for session files (default ~/.pigo/sessions)
 
 Sessions are saved as JSONL unless --no-session is set.
@@ -100,7 +100,7 @@ Sessions are saved as JSONL unless --no-session is set.
 --session resumes a file path, an id, or a unique id prefix.
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
-A yolo: true key in those files skips the same check.
+A yolo: true key in those files skips the same checks.
 Precedence is flags, then the environment, then .env, then those files, then defaults.
 `, sessionHelp(), config.DefaultBaseURL, config.DefaultModel)
 }
@@ -136,7 +136,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd.Flags().StringVarP(&flags.Workspace, "workspace", "w", "", "workspace directory (default: current directory)")
 	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or "+config.DefaultModel+")")
 	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or "+config.DefaultBaseURL+")")
-	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "run dangerous shell commands without asking")
+	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "apply file changes and dangerous shell commands without asking")
 	cmd.Flags().BoolVarP(&flags.Continue, "continue", "c", false, "resume the newest session for this workspace")
 	cmd.Flags().StringVar(&flags.Session, "session", "", "resume a session file, id, or unique id prefix")
 	cmd.Flags().BoolVar(&flags.NoSession, "no-session", false, "do not read or write a session file")

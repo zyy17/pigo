@@ -177,9 +177,37 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips the check. The chat screen and the line REPL share one command table: `/exit`, `exit`, `quit`, `/quit`, and `/reset`.
+Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips this check and [file review](#file-review). The chat screen and the line REPL share one command table: `/exit`, `exit`, `quit`, `/quit`, and `/reset`.
 
 This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, `git -C`, a subshell such as `(rm -rf /)` or `$(…)`, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
+
+## File review
+
+`write_file` and `edit_file` build a unified diff in `internal/coding` before they write. `BeforeToolCall` is the same hook as the command check. The agent core still has no policy. A call that cannot apply (missing text, a path outside the workspace, bad arguments) is not a review: `Execute` returns that error. Identical bytes are not a review either, and the write still happens.
+
+In the chat, the working row becomes the diff. Additions and deletions are colored. The panel keeps the first 8 lines and a count of the rest. A file too long for the line-diff table shows a short head of each side instead. An existing file larger than the tool read limit, or one that is not valid UTF-8, is not line-diffed: the panel shows that reason and the new text.
+
+```text
+! allow this edit?
+--- a/hello.txt
++++ b/hello.txt
+@@ -1,1 +1,1 @@
+-alpha
++beta
+hello.txt
+enter allow · esc deny
+```
+
+Enter or `y` writes. Esc or `n` does not. The tool result is `blocked: file change denied`, and the turn goes on. Ctrl-C denies on the way out and aborts.
+
+`-p` and the line session have no screen, so they deny (`blocked: file change needs review`). `--yolo` skips this review and the command check together.
+
+| Topic | Choice | Alternative | Why |
+| --- | --- | --- | --- |
+| Who asks | The chat, through `SetConfirm` | The agent core | The core stays free of policy. Coding decides what is reviewable. The screen draws it |
+| No screen | Deny | Auto-apply | Same rule as a dangerous command. A write the user cannot see does not land |
+| Skip | `--yolo` skips file review and the command check | A second flag that applies files only | One switch means "do not ask". `-p` cannot apply a file and still ask about commands, because `-p` never asks |
+| Shell | File tools only | Also review redirects | `printf > file` still writes. The review is not a sandbox |
 
 ## Tests
 
@@ -189,7 +217,7 @@ This is a pattern denylist. It is easy to bypass with a script, encoding, an ali
 
 `internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it. `.env` and skill frontmatter each drop one pair of quotes on their own. `.env` fills empty process variables for the shell tool and does not replace a variable that is already set. The process environment is applied after `.env`, so a process value still wins.
 
-Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`, `PIGO_SESSION_DIR`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, `--yolo` skips the dangerous-command check, and `-c` / `--session` resume a session file. `--no-session` keeps that run in memory.
+Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`, `PIGO_SESSION_DIR`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, `--yolo` skips file-change review and the dangerous-command check, and `-c` / `--session` resume a session file. `--no-session` keeps that run in memory.
 
 A chat request sends `model`, `messages`, `tools`, and `stream`. It does not send `max_tokens`, `temperature`, or `top_p`. GPT-5 reasoning models reject those fields, and leaving them off keeps other OpenAI-compatible providers on their own defaults.
 
@@ -199,7 +227,7 @@ The chat screen is described in [tui.md](tui.md).
 
 `Workspace.Resolve` makes a path absolute from the workspace root, follows symlinks, and rejects a target outside that root. The check uses the resolved path, so a link inside the project cannot point at a file outside it.
 
-`read_file` has one extra allowance. After the workspace check fails, it may still open a file inside a discovered skill directory. That is how a skill in `~/.pi/agent/skills` can be loaded. `write_file` and `edit_file` do not get that allowance.
+`read_file` has one extra allowance. After the workspace check fails, it may still open a file inside a discovered skill directory. That is how a skill in `~/.pi/agent/skills` can be loaded. `write_file` and `edit_file` do not get that allowance. They are reviewed in [File review](#file-review) before they write.
 
 `run_command` starts `bash` with the workspace as its working directory. Bash is required on Unix. On Windows it uses `cmd /C`. The process is ordinary. Long output keeps the tail. `OPENAI_API_KEY` is removed from its environment. The denylist in [Dangerous commands](#dangerous-commands) can block the command before that process starts.
 

@@ -122,14 +122,19 @@ func TestSessionDeniesAndContinues(t *testing.T) {
 
 func TestSessionConfirmAndYolo(t *testing.T) {
 	dir := t.TempDir()
-	denied := scriptedSession(t, dir, false, func(context.Context, string, string) (bool, error) {
+	var prompt Confirm
+	denied := scriptedSession(t, dir, false, func(_ context.Context, c Confirm) (bool, error) {
+		prompt = c
 		return false, nil
 	}, toolUse("sudo true"), ai.Assistant("no", ai.StopStop))
 	if result := toolEnd(t, denied, "ask"); !strings.Contains(result, "blocked: sudo") {
 		t.Fatalf("confirm deny: %q", result)
 	}
+	if prompt.Title != "! allow this command?" || prompt.Body != "sudo true" || prompt.Detail != "sudo" {
+		t.Fatalf("prompt %#v", prompt)
+	}
 
-	allowed := scriptedSession(t, dir, false, func(context.Context, string, string) (bool, error) {
+	allowed := scriptedSession(t, dir, false, func(context.Context, Confirm) (bool, error) {
 		return true, nil
 	}, toolUse("git push --force"), ai.Assistant("yes", ai.StopStop))
 	if result := toolEnd(t, allowed, "publish"); strings.HasPrefix(result, "blocked") {
@@ -156,7 +161,7 @@ func toolEnd(t *testing.T, session *Session, prompt string) string {
 	return result
 }
 
-func scriptedSession(t *testing.T, dir string, yolo bool, confirm func(context.Context, string, string) (bool, error), msgs ...ai.Message) *Session {
+func scriptedSession(t *testing.T, dir string, yolo bool, confirm func(context.Context, Confirm) (bool, error), msgs ...ai.Message) *Session {
 	t.Helper()
 	session, err := New(Config{
 		Model:         "fake",

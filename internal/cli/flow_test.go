@@ -38,6 +38,8 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 		Model:         "test-model",
 		Workspace:     dir,
 		UserSkillsDir: t.TempDir(),
+		// Yolo skips review so this test can follow a finished write.
+		Yolo: true,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -78,7 +78,7 @@ func TestLiveSkillOneShot(t *testing.T) {
 	done := make(chan error, 1)
 	start := time.Now()
 	go func() {
-		done <- cli.Run([]string{"-w", dir, "-p", "/skill:marker"})
+		done <- cli.Run([]string{"-w", dir, "--yolo", "-p", "/skill:marker"})
 	}()
 	select {
 	case err := <-done:
@@ -165,6 +165,8 @@ func open(t *testing.T, dir string) *coding.Session {
 		Model:         model,
 		Workspace:     dir,
 		UserSkillsDir: t.TempDir(),
+		// Live runs have no confirm screen, so yolo lets the file tools apply.
+		Yolo: true,
 	})
 	if err != nil {
 		t.Fatal(err)
