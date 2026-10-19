@@ -157,6 +157,74 @@ func TestCompactionLeafRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTornTailAfterCompactionStaysTheLeaf(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	old := strings.Repeat("a", 40*4)
+	kept := strings.Repeat("b", 40*4)
+	script := &scripted{msgs: []ai.Message{
+		ai.Assistant("ok", ai.StopStop),
+		ai.Assistant("ok", ai.StopStop),
+		ai.Assistant("## Goal\nship", ai.StopStop),
+	}}
+	session := newCompactSession(t, dir, sessions, false, script)
+	if err := session.Prompt(context.Background(), old); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), kept); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Compact(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	path := session.SessionFile()
+	lines := fileEntries(t, mustRead(t, path))
+	compID := lines[len(lines)-1].ID
+	session.closeJournal()
+	body := mustRead(t, path)
+	if err := os.WriteFile(path, append(body, []byte(`{"type":"message","id":"torn"`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	next := &scripted{msgs: []ai.Message{ai.Assistant("after", ai.StopStop)}}
+	resumed := openPersisted(t, dir, sessions, path, next)
+	if err := resumed.Prompt(context.Background(), "continue-after-tear"); err != nil {
+		t.Fatal(err)
+	}
+	resumed.closeJournal()
+
+	final := &scripted{msgs: []ai.Message{ai.Assistant("done", ai.StopStop)}}
+	again := openPersisted(t, dir, sessions, path, final)
+	if err := again.Prompt(context.Background(), "final"); err != nil {
+		t.Fatal(err)
+	}
+	req := final.requests()[0]
+	bodyText := texts(req.Messages)
+	if !strings.Contains(bodyText, "<summary>") || !strings.Contains(bodyText, "## Goal\nship") || !strings.Contains(bodyText, kept) || !strings.Contains(bodyText, "continue-after-tear") {
+		t.Fatalf("leaf after tear:\n%s", bodyText)
+	}
+	if strings.Contains(bodyText, old) {
+		t.Fatal("summarized text was sent after the torn tail was repaired")
+	}
+	raw := mustRead(t, again.SessionFile())
+	if strings.Contains(string(raw), `"id":"torn"`) {
+		t.Fatalf("torn fragment stayed:\n%s", raw)
+	}
+	var parent string
+	for _, line := range fileEntries(t, raw) {
+		if line.Type != "message" || !strings.Contains(string(line.Message), "continue-after-tear") {
+			continue
+		}
+		if line.ParentID == nil {
+			t.Fatal("continued message has no parent")
+		}
+		parent = *line.ParentID
+	}
+	if parent != compID {
+		t.Fatalf("continued parent %s, compaction %s", parent, compID)
+	}
+}
+
 func TestHandWrittenCompactionProjectsTheTail(t *testing.T) {
 	dir := t.TempDir()
 	sessions := t.TempDir()

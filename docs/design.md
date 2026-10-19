@@ -95,7 +95,7 @@ Files live under `~/.pigo/sessions/`, one directory per workspace:
 
 The directory name is the workspace path with one leading separator removed and `/`, `\`, and `:` turned into `-`, then wrapped in `--`. That encoding is Pi's. The root is `~/.pigo/sessions`, not `~/.pi/agent/sessions`. pigo writes a subset of Pi's entries, and a file in Pi's directory would be something Pi tries to open. `PIGO_SESSION_DIR`, `session_dir` in a config file, or `--session-dir` selects another root. The directory is created as `0700` and each file as `0600`, because a transcript can hold source and command output.
 
-The file is created on the first user message. Quitting without a prompt leaves no file. Each later message is one appended line, synced before the turn goes on. A crash can tear the last line. Load drops a trailing partial line and keeps the complete ones. A bad line in the middle is an error, so a short read is not mistaken for the whole session.
+The file is created on the first user message. Quitting without a prompt leaves no file. Each later message is one appended line, synced before the turn goes on. A crash can tear the last line. Load drops a trailing partial line and keeps the complete ones. The next append cuts that partial fragment off the file before writing, so the new line is not glued onto it. A finished line that is only missing its newline stays, and that newline is written first. A bad line in the middle is an error, so a short read is not mistaken for the whole session.
 
 ```json
 {"type":"session","version":3,"id":"550e8400-e29b-41d4-a716-446655440000","timestamp":"2026-10-19T17:40:00.000Z","cwd":"/tmp/project"}
