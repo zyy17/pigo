@@ -101,7 +101,7 @@ Bubble Tea asks the terminal for keyboard disambiguation and turns it off on qui
 | Screen | Alternate screen, scroll inside the app | Leave the chat in the terminal scrollback | Matches Codex. Quit restores the shell exactly. The cost is that the terminal's own scrollback cannot move through the chat |
 | Cursor | `tea.View.Cursor`, a steady bar on the caret cell | Sniff the frame bytes and move the cursor after each paint | v2 already has a cursor field. The hardware cursor is what an IME uses to place its candidate window |
 | Newline | Shift+Enter when the terminal can report it | Treat Enter as newline and use another key to send | Enter sends, as in Codex. Ctrl+J, Alt+Enter, and a trailing `\` cover terminals that cannot tell Shift+Enter from Enter |
-| Composer | A small `composer` struct and `inputBlock`. bubbles supplies only the spinner | bubbles textarea | The bar is three lines, CJK-aware, and has to report a caret cell. A textarea would be a larger widget for less control |
+| Composer | A small `composer` struct and `inputBlock`. bubbles supplies only the spinner | bubbles textarea | The bar is 3–10 lines, CJK-aware, and has to report a caret cell. A textarea would be a larger widget for less control |
 | Width | `ansi.StringWidth`; spaces wrap first, then hard wrap | Count runes, or let the terminal wrap | CJK is two columns. The caret has to land on a cell, not a byte |
 | Resize | Rewrap from the stored source text | Keep the already wrapped lines | The source is the truth. A line offset can drift, which is called out below |
 | Look | Codex-like colors, wordmark, segmented status bar | Copy a larger TUI | crush is a useful reference for how a calm chat feels. None of its code is in this tree |

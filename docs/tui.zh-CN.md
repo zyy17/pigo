@@ -101,7 +101,7 @@ Bubble Tea 向终端请求按键消歧义，退出时关掉。能回答的终端
 | 屏幕 | 备用屏幕，在程序里滚动 | 把对话留在终端回滚区 | 和 Codex 一样。退出时 shell 原样回来。代价是不能用终端自己的回滚来翻对话 |
 | 光标 | `tea.View.Cursor`，插入点上一根稳定竖条 | 嗅探每一帧的字节，画完再移动光标 | v2 已经有光标字段。输入法靠硬件光标决定候选窗的位置 |
 | 换行 | 终端能报告时用 Shift+Enter | 把 Enter 当成换行，另找一个键发送 | Enter 发送，和 Codex 一样。分不清 Shift+Enter 和 Enter 的终端用 Ctrl+J、Alt+Enter 和行末 `\` |
-| 输入条 | 一个小的 `composer` 和 `inputBlock`。bubbles 只提供转圈 | bubbles 的 textarea | 输入条是三行，要按中文宽度折行，还要报出插入点的单元格。textarea 更大，控制更少 |
+| 输入条 | 一个小的 `composer` 和 `inputBlock`。bubbles 只提供转圈 | bubbles 的 textarea | 输入条是 3–10 行，要按中文宽度折行，还要报出插入点的单元格。textarea 更大，控制更少 |
 | 宽度 | `ansi.StringWidth`；先在空格处折，再硬折 | 按 rune 计数，或交给终端折行 | 中文占两列。插入点必须落在单元格上，而不是字节上 |
 | 改变大小 | 按存下来的原文重新折行 | 保留已经折好的行 | 原文才是依据。行偏移可能漂移，见下面的限制 |
 | 外观 | Codex 式的颜色、字标和分段状态栏 | 搬来一套更大的 TUI | crush 适合用来感受一个安静的聊天界面。这棵树里没有它的代码 |
