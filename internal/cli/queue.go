@@ -6,7 +6,7 @@ import (
 
 // queueText keeps one follow-up while a turn is running.
 // Enter must not drop the draft. A second Enter extends that same message.
-// /exit and /reset are commands, not text to send later.
+// /exit, exit, quit, and /reset are commands, not text to send later.
 func (m *chatModel) queueText(text string) tea.Cmd {
 	switch sessionCommand(text) {
 	case cmdEmpty:
@@ -16,8 +16,6 @@ func (m *chatModel) queueText(text string) tea.Cmd {
 		m.quitting = true
 		return tea.Quit
 	case cmdReset:
-		m.comp.clear()
-		m.noteTyped()
 		m.addBlock(kindInfo, "still working — /reset waits")
 		return nil
 	}
@@ -26,20 +24,21 @@ func (m *chatModel) queueText(text string) tea.Cmd {
 	} else {
 		m.queued += "\n" + text
 	}
-	m.comp.clear()
-	m.noteTyped()
 	return nil
 }
 
 // takeQueue runs after AgentEnd. A finished turn sends the follow-up.
-// An interrupt or error puts it back so the user can edit it first.
+// An interrupt, an error, or a stop key that landed as the turn ended
+// puts it back so the user can edit it first.
 func (m *chatModel) takeQueue(err error) tea.Cmd {
+	stop := m.stopping
+	m.stopping = false
 	if m.queued == "" {
 		return nil
 	}
 	text := m.queued
 	m.queued = ""
-	if err != nil {
+	if err != nil || stop {
 		m.restoreQueued(text)
 		return nil
 	}
