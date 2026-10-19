@@ -40,6 +40,7 @@ func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	// Esc stops a running turn even when the slash menu is open.
 	// The menu uses Esc only while idle. A confirm prompt owns Esc first.
 	if m.busy && msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) {
+		m.stopping = true
 		m.session.Abort()
 		return nil
 	}
@@ -57,6 +58,7 @@ func (m *chatModel) onInterrupt() tea.Cmd {
 		m.finishConfirm(false)
 	}
 	if m.busy {
+		m.stopping = true
 		m.session.Abort()
 		return nil
 	}
@@ -150,6 +152,10 @@ func (m *chatModel) onEnter() tea.Cmd {
 		return nil
 	}
 	text := strings.TrimSpace(m.comp.text())
+	// Clear here. submit and queueText leave the composer alone, so a
+	// follow-up that starts on its own keeps a draft still being typed.
+	m.comp.clear()
+	m.noteTyped()
 	if m.busy {
 		return m.queueText(text)
 	}

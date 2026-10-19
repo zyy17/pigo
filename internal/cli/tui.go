@@ -55,6 +55,7 @@ type chatModel struct {
 	ready            bool
 	busy             bool
 	quitting         bool
+	stopping         bool
 	queued           string
 	ask              *confirmReq
 	suggestDismissed bool
@@ -172,20 +173,20 @@ func (m *chatModel) submit(text string) tea.Cmd {
 	case cmdReset:
 		m.session.Reset()
 		m.live = ""
-		m.comp.clear()
 		m.addBlock(kindInfo, "— transcript cleared —")
 		return nil
 	}
 	expanded, err := commandText(m.session, text)
 	if err != nil {
-		m.comp.clear()
+		// A queued /skill: that cannot expand never starts a turn.
+		// Put the line back, ahead of a draft still in the composer.
+		m.restoreQueued(text)
 		m.addBlock(kindError, err.Error())
 		return nil
 	}
 	m.busy = true
 	m.started = time.Now()
 	m.live = ""
-	m.comp.clear()
 	m.addBlock(kindUser, text)
 	return tea.Batch(m.runPrompt(expanded), m.spin.Tick)
 }

@@ -125,6 +125,65 @@ func TestEnterWhileBusyQueuesUntilAgentEnd(t *testing.T) {
 	}
 }
 
+func TestQueuedTurnKeepsTheDraft(t *testing.T) {
+	m := testChat(t)
+	m.resize(80, 24)
+	m.busy = true
+	m.comp.set("later")
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(chatModel)
+	m.comp.set("half-typed draft")
+
+	next, cmd := m.Update(streamMsg{event: agent.Event{Type: agent.AgentEnd}})
+	m = next.(chatModel)
+	if cmd == nil || !m.busy || m.queued != "" || m.comp.text() != "half-typed draft" {
+		t.Fatalf("draft %q busy %v queued %q cmd %v", m.comp.text(), m.busy, m.queued, cmd != nil)
+	}
+	if !strings.Contains(ansi.Strip(m.transcript()), "> later") {
+		t.Fatal("queue was not sent")
+	}
+}
+
+func TestEscBeforeAgentEndRestoresTheQueue(t *testing.T) {
+	m := testChat(t)
+	m.resize(80, 24)
+	m.busy = true
+	m.comp.set("later")
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(chatModel)
+	m.comp.set("draft")
+
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = next.(chatModel)
+	next, cmd := m.Update(streamMsg{event: agent.Event{Type: agent.AgentEnd}})
+	m = next.(chatModel)
+	if cmd != nil || m.busy || m.queued != "" || m.comp.text() != "later\ndraft" {
+		t.Fatalf("restored %q busy %v queued %q cmd %v", m.comp.text(), m.busy, m.queued, cmd != nil)
+	}
+	if strings.Contains(ansi.Strip(m.transcript()), "> later") {
+		t.Fatal("queue was sent after Esc")
+	}
+}
+
+func TestQueuedUnknownSkillReturnsToTheComposer(t *testing.T) {
+	m := testChat(t)
+	m.resize(80, 24)
+	m.busy = true
+	m.comp.set("/skill:nope do it")
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(chatModel)
+	m.comp.set("draft")
+
+	next, cmd := m.Update(streamMsg{event: agent.Event{Type: agent.AgentEnd}})
+	m = next.(chatModel)
+	if cmd != nil || m.busy || m.comp.text() != "/skill:nope do it\ndraft" {
+		t.Fatalf("composer %q busy %v cmd %v", m.comp.text(), m.busy, cmd != nil)
+	}
+	if !strings.Contains(m.transcript(), "unknown skill") {
+		t.Fatal("skill error was not shown")
+	}
+}
+
 func TestInterruptedTurnRestoresTheQueue(t *testing.T) {
 	m := testChat(t)
 	m.resize(80, 24)
@@ -147,7 +206,7 @@ func TestInterruptedTurnRestoresTheQueue(t *testing.T) {
 	}
 }
 
-func TestBusySlashCommandsAreNotQueued(t *testing.T) {
+func TestBusySlashCommands(t *testing.T) {
 	m := testChat(t)
 	m.resize(80, 24)
 	m.busy = true
@@ -173,5 +232,17 @@ func TestBusySlashCommandsAreNotQueued(t *testing.T) {
 	m = next.(chatModel)
 	if cmd == nil || !m.quitting {
 		t.Fatal("exit did not quit")
+	}
+
+	for _, line := range []string{"exit", "quit"} {
+		q := testChat(t)
+		q.resize(80, 24)
+		q.busy = true
+		q.comp.set(line)
+		next, cmd = q.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		q = next.(chatModel)
+		if cmd == nil || !q.quitting {
+			t.Fatalf("%s did not quit", line)
+		}
 	}
 }
