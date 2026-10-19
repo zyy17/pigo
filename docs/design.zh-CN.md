@@ -1,6 +1,6 @@
 # pigo 如何对应 Pi
 
-[English](design.md) · [说明](../README.zh-CN.md)
+[English](design.md) · [界面](tui.zh-CN.md) · [说明](../README.zh-CN.md)
 
 pigo 是一个用来阅读 [Pi](https://github.com/earendil-works/pi) 核心想法的小型 Go 程序。它保留同样的三层，不包含技能市场、扩展和完整 TUI。
 

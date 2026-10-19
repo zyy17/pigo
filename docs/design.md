@@ -1,6 +1,6 @@
 # How pigo follows Pi
 
-[中文](design.zh-CN.md) · [README](../README.md)
+[中文](design.zh-CN.md) · [TUI](tui.md) · [README](../README.md)
 
 pigo is a small Go program for reading [Pi](https://github.com/earendil-works/pi)'s core ideas. It keeps the same three layers and leaves out the marketplace, extensions, and full TUI.
 
