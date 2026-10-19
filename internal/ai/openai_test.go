@@ -172,6 +172,13 @@ func TestRequestShape(t *testing.T) {
 	if body["model"] != "demo" || body["stream"] != true {
 		t.Fatalf("body model/stream: %#v %#v", body["model"], body["stream"])
 	}
+	// GPT-5 reasoning models reject max_tokens and non-default temperature or top_p.
+	// Leaving them off also keeps compatible providers such as Zhipu unchanged.
+	for _, key := range []string{"max_tokens", "max_completion_tokens", "temperature", "top_p"} {
+		if _, ok := body[key]; ok {
+			t.Fatalf("request set %s", key)
+		}
+	}
 	msgs, _ := body["messages"].([]any)
 	roles := make([]string, 0, len(msgs))
 	for _, raw := range msgs {

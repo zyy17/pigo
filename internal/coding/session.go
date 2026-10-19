@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultBaseURL = "https://api.openai.com/v1"
-	defaultModel   = "gpt-4o-mini"
+	defaultModel   = "gpt-5.6-luna"
 )
 
 // Config selects the model endpoint and the workspace.

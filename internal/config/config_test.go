@@ -104,7 +104,7 @@ func TestMissingFilesUseDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Provider != "openai" || cfg.Model != "gpt-4o-mini" || cfg.Workspace != "." {
+	if cfg.Provider != "openai" || cfg.Model != "gpt-5.6-luna" || cfg.Workspace != "." {
 		t.Fatalf("%#v", cfg)
 	}
 	if cfg.BaseURL != "https://api.openai.com/v1" {
