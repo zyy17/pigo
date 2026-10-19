@@ -77,7 +77,7 @@ func defaults() map[string]any {
 	return map[string]any{
 		"provider":  "openai",
 		"base_url":  "https://api.openai.com/v1",
-		"model":     "gpt-4o-mini",
+		"model":     "gpt-5.6-luna",
 		"workspace": ".",
 	}
 }
