@@ -44,7 +44,7 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	}
 	events := make(chan agent.Event, 64)
 	session.Subscribe(func(ev agent.Event) { events <- ev })
-	m := newChat(session, events)
+	m := newChat(session)
 	m.resize(80, 24)
 
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
@@ -67,7 +67,7 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.View().Content), "please write hello.txt") || !strings.Contains(ansi.Strip(m.View().Content), askPlaceholder) {
 		t.Fatal("submitted line is not in the transcript above a cleared composer")
 	}
-	m = runCmds(t, m, cmd)
+	m = runCmds(t, m, cmd, events)
 	if m.busy || m.status != "ready" {
 		t.Fatalf("status %q busy %v", m.status, m.busy)
 	}
@@ -134,7 +134,7 @@ func TestHeadlessEscInterruptsAHang(t *testing.T) {
 	}
 	events := make(chan agent.Event, 64)
 	session.Subscribe(func(ev agent.Event) { events <- ev })
-	m := newChat(session, events)
+	m := newChat(session)
 	m.resize(80, 24)
 	m.comp.set("wait")
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -142,7 +142,7 @@ func TestHeadlessEscInterruptsAHang(t *testing.T) {
 
 	done := make(chan chatModel, 1)
 	go func() {
-		done <- runCmds(t, m, cmd)
+		done <- runCmds(t, m, cmd, events)
 	}()
 	script.Wait(t)
 	if _, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc}); cmd != nil {
