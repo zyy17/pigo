@@ -25,7 +25,7 @@ flowchart TD
 | Model and the turn | `tui.go` | `chatModel`, `runTUI`, `apply`, `submit` |
 | Keys | `keys.go` | `onKey`, `onComposer`, `continuedLine` |
 | Frame | `view.go` | `View`, `layout`, `chromeAbove`, `footer` |
-| Transcript scroll | `scroll.go` | `scrollRows`, `transcriptWindow`, `follow` |
+| Transcript scroll | `scroll.go` | `scrollRows`, `transcriptWindow`, `scroll` |
 | Composer | `input.go` | `composer`, `inputBlock` |
 | Hardware cursor | `cursor.go` | `placeCursor` |
 | Width and wrap | `wrap.go` | `wrapText`, `wrapRunes` |
@@ -56,7 +56,7 @@ Short history stays at the top of the pane. The spare rows sit above the compose
 
 ## A turn
 
-Enter commits the composer, clears it, and calls `Session.Prompt`. Events come back on a channel as `streamMsg`. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status.
+Enter commits the composer, clears it, and calls `Session.Prompt`. `runTUI` subscribes to the session and `program.Send`s each event as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
 
 ```mermaid
 stateDiagram-v2
@@ -88,7 +88,8 @@ Esc during a turn calls `Abort`. Esc on the confirm panel only denies that comma
 | Ctrl-C | running | abort; also denies a confirm |
 | Ctrl-C | idle | quit |
 | Ctrl-D | idle, empty composer | quit |
-| Ctrl-U, Ctrl-W | idle | clear the line, or delete a word |
+| Ctrl-U | idle | clear the whole composer |
+| Ctrl-W | idle | delete the word before the caret |
 | arrows, Home, End | idle | move the caret; Up and Down move the menu |
 
 Bubble Tea asks the terminal for keyboard disambiguation and turns it off on quit. Terminals that answer deliver Shift+Enter as its own key. The others still have Ctrl+J, Alt+Enter, and the trailing backslash.
