@@ -19,8 +19,20 @@ const (
 	ToolEnd       EventType = "tool_execution_end"
 )
 
+// Usage is the latest model call and the session sum.
+// HaveLast is false when that call omitted a usage object.
+// HaveSession is false until any call reports one.
+type Usage struct {
+	Last        ai.Usage
+	Session     ai.Usage
+	HaveLast    bool
+	HaveSession bool
+}
+
 // Event reports loop progress to the UI.
 // Message is set for message events. Tool fields are set for tool events.
+// Usage is this model call, set on the assistant message_end. Nil when omitted.
+// Session is the sum of calls that reported usage. Nil until one does.
 type Event struct {
 	Type      EventType
 	Turn      int
@@ -32,4 +44,6 @@ type Event struct {
 	Result    string
 	IsError   bool
 	Err       error
+	Usage     *ai.Usage
+	Session   *ai.Usage
 }

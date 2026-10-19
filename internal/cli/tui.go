@@ -62,6 +62,11 @@ type chatModel struct {
 	// scroll is the first visible transcript line. Negative follows the tail.
 	scroll  int
 	started time.Time
+	// usageIn and usageOut are the session totals. usageSet is false until
+	// a provider sends a usage object.
+	usageIn  int
+	usageOut int
+	usageSet bool
 }
 
 type streamMsg struct {
@@ -70,8 +75,8 @@ type streamMsg struct {
 
 // runTUI draws the chat on the alternate screen, the way Codex does.
 // Quitting leaves that screen, which restores the shell buffer from
-// before pigo started. Nothing is printed afterwards: there is no
-// session id and no token total to report.
+// before pigo started. Nothing is printed afterwards. Token counts stay
+// on the status line while the session is open, and are not saved.
 //
 // The alternate screen, the mouse, and the cursor are fields on the
 // view. Bubble Tea leaves the alternate screen when the program exits.
@@ -176,6 +181,7 @@ func (m *chatModel) submit(text string) tea.Cmd {
 	case cmdReset:
 		m.session.Reset()
 		m.live = ""
+		m.clearUsage()
 		m.addBlock(kindInfo, "— transcript cleared —")
 		return nil
 	}
@@ -210,6 +216,7 @@ func (m *chatModel) apply(ev agent.Event) tea.Cmd {
 		}
 		m.live += ev.TextDelta
 	case agent.MessageEnd:
+		m.noteUsage(ev)
 		m.finishMessage(ev.Message)
 	case agent.ToolStart:
 		m.flushLive()
@@ -222,6 +229,25 @@ func (m *chatModel) apply(ev agent.Event) tea.Cmd {
 		return m.takeQueue(ev.Err)
 	}
 	return nil
+}
+
+func (m *chatModel) noteUsage(ev agent.Event) {
+	u := ev.Session
+	if u == nil {
+		u = ev.Usage
+	}
+	if u == nil {
+		return
+	}
+	m.usageIn = u.Input
+	m.usageOut = u.Output
+	m.usageSet = true
+}
+
+func (m *chatModel) clearUsage() {
+	m.usageIn = 0
+	m.usageOut = 0
+	m.usageSet = false
 }
 
 func (m *chatModel) finishMessage(msg ai.Message) {

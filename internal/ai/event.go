@@ -14,13 +14,33 @@ const (
 	EventError EventType = "error"
 )
 
+// Usage is token counts from one model response.
+// Input is prompt or input tokens. Output is completion or output tokens.
+// Total is set only when the provider sent it.
+type Usage struct {
+	Input  int
+	Output int
+	Total  int
+}
+
+// Add returns the sum of two usage reports.
+func (u Usage) Add(v Usage) Usage {
+	return Usage{
+		Input:  u.Input + v.Input,
+		Output: u.Output + v.Output,
+		Total:  u.Total + v.Total,
+	}
+}
+
 // Event is one item from StreamFunc.
 // Text deltas are for display. The done event is the assistant message
 // the agent stores, including any tool calls.
+// Usage is set on done when the provider sent a usage object.
 type Event struct {
 	Type    EventType
 	Text    string
 	Message Message
+	Usage   *Usage
 	Err     error
 }
 

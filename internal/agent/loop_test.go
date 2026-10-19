@@ -331,6 +331,61 @@ func TestAbortStopsPromptChainedFromAgentEnd(t *testing.T) {
 	}
 }
 
+func TestUsageAccumulatesAcrossCalls(t *testing.T) {
+	first := &ai.Usage{Input: 10, Output: 4, Total: 14}
+	second := &ai.Usage{Input: 3, Output: 2, Total: 5}
+	script := &fakeModel{
+		msgs: []ai.Message{
+			ai.Assistant("", ai.StopToolUse, call("c1", "echo", map[string]any{})),
+			ai.Assistant("done", ai.StopStop),
+			ai.Assistant("later", ai.StopStop),
+		},
+		usages: []*ai.Usage{first, nil, second},
+	}
+	ag := newAgent(t, script, echoTool())
+	var ends []agent.Event
+	ag.Subscribe(func(ev agent.Event) {
+		if ev.Type == agent.MessageEnd && ev.Message.Role == ai.RoleAssistant {
+			ends = append(ends, ev)
+		}
+	})
+	if err := ag.Prompt(context.Background(), "go"); err != nil {
+		t.Fatal(err)
+	}
+	if len(ends) != 2 {
+		t.Fatalf("assistant ends %d", len(ends))
+	}
+	if ends[0].Usage == nil || ends[0].Usage.Input != 10 || ends[0].Usage.Output != 4 || ends[0].Usage.Total != 14 {
+		t.Fatalf("first call %#v", ends[0].Usage)
+	}
+	if ends[0].Session == nil || ends[0].Session.Input != 10 || ends[0].Session.Output != 4 {
+		t.Fatalf("first session %#v", ends[0].Session)
+	}
+	if ends[1].Usage != nil {
+		t.Fatalf("omitted call invented usage %#v", ends[1].Usage)
+	}
+	if ends[1].Session == nil || ends[1].Session.Input != 10 || ends[1].Session.Total != 14 {
+		t.Fatalf("session changed on an omitted call %#v", ends[1].Session)
+	}
+	got := ag.Usage()
+	if got.HaveLast || !got.HaveSession || got.Session.Input != 10 || got.Session.Output != 4 {
+		t.Fatalf("after omitted call %#v", got)
+	}
+
+	ag.Reset()
+	got = ag.Usage()
+	if got.HaveLast || got.HaveSession || got.Session.Input != 0 {
+		t.Fatalf("reset %#v", got)
+	}
+	if err := ag.Prompt(context.Background(), "next"); err != nil {
+		t.Fatal(err)
+	}
+	got = ag.Usage()
+	if !got.HaveLast || !got.HaveSession || got.Last != *second || got.Session != *second {
+		t.Fatalf("after reset %#v", got)
+	}
+}
+
 func newAgent(t *testing.T, script *fakeModel, tool agent.Tool) *agent.Agent {
 	t.Helper()
 	ag, err := agent.New(agent.Config{
@@ -384,6 +439,7 @@ func roles(msgs []ai.Message) string {
 type fakeModel struct {
 	mu        sync.Mutex
 	msgs      []ai.Message
+	usages    []*ai.Usage
 	i         int
 	reqs      []ai.Request
 	streamErr error
@@ -396,8 +452,13 @@ func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event
 	if f.i >= len(f.msgs) {
 		return nil, fmt.Errorf("unexpected model call %d", f.i+1)
 	}
+	idx := f.i
 	msg := f.msgs[f.i]
 	f.i++
+	var usage *ai.Usage
+	if idx < len(f.usages) {
+		usage = f.usages[idx]
+	}
 	streamErr := f.streamErr
 	f.streamErr = nil
 	ch := make(chan ai.Event, 2)
@@ -410,7 +471,7 @@ func (f *fakeModel) stream(ctx context.Context, req ai.Request) (<-chan ai.Event
 		if text := msg.Text; text != "" {
 			ch <- ai.Event{Type: ai.EventTextDelta, Text: text}
 		}
-		ch <- ai.Event{Type: ai.EventDone, Message: msg}
+		ch <- ai.Event{Type: ai.EventDone, Message: msg, Usage: usage}
 	}()
 	return ch, nil
 }

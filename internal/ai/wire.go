@@ -10,10 +10,17 @@ import (
 // read from top to bottom.
 
 type wireRequest struct {
-	Model    string        `json:"model"`
-	Messages []wireMessage `json:"messages"`
-	Tools    []wireTool    `json:"tools,omitempty"`
-	Stream   bool          `json:"stream"`
+	Model         string            `json:"model"`
+	Messages      []wireMessage     `json:"messages"`
+	Tools         []wireTool        `json:"tools,omitempty"`
+	Stream        bool              `json:"stream"`
+	StreamOptions wireStreamOptions `json:"stream_options"`
+}
+
+// wireStreamOptions is the OpenAI stream_options object.
+// include_usage asks for a usage object, usually on the last chunk.
+type wireStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type wireMessage struct {
@@ -48,6 +55,39 @@ type wireToolSpec struct {
 type wireChunk struct {
 	Choices []wireChoice `json:"choices"`
 	Error   *wireError   `json:"error,omitempty"`
+	Usage   *wireUsage   `json:"usage,omitempty"`
+}
+
+// wireUsage is the chat-completions usage object.
+// Pointers keep a missing field apart from an explicit zero.
+// prompt_tokens wins over input_tokens. completion_tokens wins over output_tokens.
+type wireUsage struct {
+	PromptTokens     *int `json:"prompt_tokens,omitempty"`
+	CompletionTokens *int `json:"completion_tokens,omitempty"`
+	TotalTokens      *int `json:"total_tokens,omitempty"`
+	InputTokens      *int `json:"input_tokens,omitempty"`
+	OutputTokens     *int `json:"output_tokens,omitempty"`
+}
+
+func (w *wireUsage) counts() (Usage, bool) {
+	if w == nil {
+		return Usage{}, false
+	}
+	u := Usage{}
+	if w.PromptTokens != nil {
+		u.Input = *w.PromptTokens
+	} else if w.InputTokens != nil {
+		u.Input = *w.InputTokens
+	}
+	if w.CompletionTokens != nil {
+		u.Output = *w.CompletionTokens
+	} else if w.OutputTokens != nil {
+		u.Output = *w.OutputTokens
+	}
+	if w.TotalTokens != nil {
+		u.Total = *w.TotalTokens
+	}
+	return u, true
 }
 
 type wireError struct {
@@ -78,10 +118,11 @@ func encodeRequest(req Request) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(wireRequest{
-		Model:    req.Model,
-		Messages: messages,
-		Tools:    wireTools(req.Tools),
-		Stream:   true,
+		Model:         req.Model,
+		Messages:      messages,
+		Tools:         wireTools(req.Tools),
+		Stream:        true,
+		StreamOptions: wireStreamOptions{IncludeUsage: true},
 	})
 }
 

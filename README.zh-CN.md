@@ -176,7 +176,10 @@ workspace: .
 → write_file {"path":"hello.txt","content":"hi"}
 ← wrote hello.txt (2 bytes)
 Created hello.txt.
+120 in · 40 out
 ```
+
+最后一行只在提供方报告了 token 用量时出现。聊天状态栏用同样的写法显示会话合计（`1.2K in · 340 out`），没有用量时留空。用量不保存，pigo 也不计价。
 
 ## 不做的事
 

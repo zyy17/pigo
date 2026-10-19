@@ -30,7 +30,7 @@ func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 			continue
 		}
 		if data == "[DONE]" {
-			out <- Event{Type: EventDone, Message: acc.message()}
+			out <- acc.doneEvent()
 			return
 		}
 		if err := acc.consume(data, out); err != nil {
@@ -43,7 +43,7 @@ func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 		return
 	}
 	if acc.finish != "" {
-		out <- Event{Type: EventDone, Message: acc.message()}
+		out <- acc.doneEvent()
 		return
 	}
 	sendStreamError(out, errors.New("stream ended before the model finished"), acc.message())

@@ -32,9 +32,18 @@ type Agent struct {
 	maxTurns int
 	before   BeforeToolCall
 	subs     []func(Event)
+	usage    usageTotals
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
+}
+
+// usageTotals is in-memory only. Reset drops it with the transcript.
+type usageTotals struct {
+	last   ai.Usage
+	sum    ai.Usage
+	lastOK bool
+	sumOK  bool
 }
 
 // New checks the config and returns an idle agent.
@@ -76,9 +85,48 @@ func (a *Agent) Messages() []ai.Message {
 	return a.state.snapshot()
 }
 
-// Reset drops the transcript and keeps the prompt, model, and tools.
+// Reset drops the transcript and the token totals.
+// The prompt, model, and tools stay.
 func (a *Agent) Reset() {
 	a.state.Messages = nil
+	a.usage = usageTotals{}
+}
+
+// Usage returns the latest model call and the session sum.
+func (a *Agent) Usage() Usage {
+	return Usage{
+		Last:        a.usage.last,
+		Session:     a.usage.sum,
+		HaveLast:    a.usage.lastOK,
+		HaveSession: a.usage.sumOK,
+	}
+}
+
+// noteCallUsage records one model call.
+// A nil call means the provider omitted usage. Earlier calls stay in the sum.
+func (a *Agent) noteCallUsage(call *ai.Usage) (last, session *ai.Usage) {
+	if call == nil {
+		a.usage.last = ai.Usage{}
+		a.usage.lastOK = false
+	} else {
+		a.usage.last = *call
+		a.usage.lastOK = true
+		a.usage.sum = a.usage.sum.Add(*call)
+		a.usage.sumOK = true
+	}
+	return a.usage.snapshot()
+}
+
+func (u usageTotals) snapshot() (last, session *ai.Usage) {
+	if u.lastOK {
+		c := u.last
+		last = &c
+	}
+	if u.sumOK {
+		c := u.sum
+		session = &c
+	}
+	return last, session
 }
 
 // Abort cancels the Prompt that is currently running.

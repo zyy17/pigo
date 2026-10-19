@@ -207,7 +207,7 @@ func displayPrefix(line string, width int) string {
 }
 
 func TestStyledFooterMatchesPlainWidth(t *testing.T) {
-	styled := styleFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
+	styled := styleFooter("ready", "glm-5.3", "/tmp/pigo-live", "", 80)
 	plain := ansi.Strip(styled)
 	if ansi.StringWidth(styled) != ansi.StringWidth(plain) || ansi.StringWidth(styled) > 80 {
 		t.Fatalf("styled width %d plain %d", ansi.StringWidth(styled), ansi.StringWidth(plain))
@@ -220,10 +220,10 @@ func TestStyledFooterMatchesPlainWidth(t *testing.T) {
 	if strings.Contains(plain, "esc to interrupt") {
 		t.Fatalf("idle footer offers interrupt: %s", plain)
 	}
-	if styleFooter("ready", "m", "/tmp", 80) == styleFooter("error", "m", "/tmp", 80) {
+	if styleFooter("ready", "m", "/tmp", "", 80) == styleFooter("error", "m", "/tmp", "", 80) {
 		t.Fatal("ready and error share one color")
 	}
-	if styleFooter("working", "m", "/tmp", 80) == styleFooter("ready", "m", "/tmp", 80) {
+	if styleFooter("working", "m", "/tmp", "", 80) == styleFooter("ready", "m", "/tmp", "", 80) {
 		t.Fatal("working and ready share one color")
 	}
 	if !strings.Contains(styled, "00ADD8") && !strings.Contains(strings.ToLower(styled), "38;2;0;173;216") && !strings.Contains(styled, "38;5;") {

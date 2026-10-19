@@ -37,7 +37,7 @@ flowchart TD
 
 ## Frame
 
-The transcript fills whatever room is left. The band under it stays put: a blank line, then either the working row or the confirm panel, then the slash menu, then the composer, a blank line, and the status bar.
+The transcript fills whatever room is left. The band under it stays put: a blank line, then either the working row or the confirm panel, then the slash menu, then the composer, a blank line, and the status bar. After a model call reports usage, that bar gains a Codex-style segment for the session total, such as `1.2K in · 340 out`. The segment stays off when the provider sends no usage.
 
 ```mermaid
 flowchart TB
@@ -115,6 +115,6 @@ Bubble Tea asks the terminal for keyboard disambiguation and turns it off on qui
 ## Limits
 
 - There is no `--no-alt-screen`. A terminal session is always the alternate screen.
-- Quit prints nothing. There is no token total and no resume handle.
+- Quit prints nothing. There is no resume handle. Session token counts stay on the status line and are not saved.
 - A scroll offset is a wrapped line. Resizing rewraps from the source, so the same offset can land on a different sentence.
 - Shift+Enter is a plain Enter on terminals that do not answer the keyboard-disambiguation query.

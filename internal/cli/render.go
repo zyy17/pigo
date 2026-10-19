@@ -19,6 +19,9 @@ func render(w io.Writer, ev agent.Event) {
 		if ev.Message.Role == ai.RoleAssistant && ev.Message.Text != "" && !strings.HasSuffix(ev.Message.Text, "\n") {
 			fmt.Fprintln(w)
 		}
+		if line := usageLine(ev.Usage, ev.Session); line != "" {
+			fmt.Fprintln(w, line)
+		}
 	case agent.ToolStart:
 		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, flattenLine(string(ev.Args), toolArgCols))
 	case agent.ToolEnd:

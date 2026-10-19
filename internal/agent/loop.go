@@ -117,7 +117,8 @@ func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 				a.emit(Event{Type: MessageStart, Message: msg})
 			}
 			a.add(msg)
-			a.emit(Event{Type: MessageEnd, Message: msg})
+			last, session := a.noteCallUsage(ev.Usage)
+			a.emit(Event{Type: MessageEnd, Message: msg, Usage: last, Session: session})
 			return msg, nil
 		case ai.EventError:
 			return a.finishStreamError(started, ev)
@@ -142,7 +143,8 @@ func (a *Agent) finishStreamError(started bool, ev ai.Event) (ai.Message, error)
 			a.emit(Event{Type: MessageStart, Message: msg})
 		}
 		a.add(msg)
-		a.emit(Event{Type: MessageEnd, Message: msg})
+		last, session := a.noteCallUsage(nil)
+		a.emit(Event{Type: MessageEnd, Message: msg, Usage: last, Session: session})
 	}
 	return msg, err
 }

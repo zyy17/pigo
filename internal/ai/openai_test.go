@@ -60,6 +60,9 @@ func TestStreamText(t *testing.T) {
 	if done.Text != "Hello there" || done.StopReason != ai.StopStop {
 		t.Fatalf("done %#v", done)
 	}
+	if doneEvent(t, evs).Usage != nil {
+		t.Fatalf("usage invented: %#v", doneEvent(t, evs).Usage)
+	}
 }
 
 func TestStreamToolCalls(t *testing.T) {
@@ -172,6 +175,10 @@ func TestRequestShape(t *testing.T) {
 	if body["model"] != "demo" || body["stream"] != true {
 		t.Fatalf("body model/stream: %#v %#v", body["model"], body["stream"])
 	}
+	opts, _ := body["stream_options"].(map[string]any)
+	if opts["include_usage"] != true {
+		t.Fatalf("stream_options %#v", body["stream_options"])
+	}
 	// GPT-5 reasoning models reject max_tokens and non-default temperature or top_p.
 	// Leaving them off also keeps compatible providers such as Zhipu unchanged.
 	for _, key := range []string{"max_tokens", "max_completion_tokens", "temperature", "top_p"} {
@@ -260,6 +267,104 @@ func TestMissingAPIKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
+}
+
+func TestStreamUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta":         map[string]any{"content": "Hi"},
+				"finish_reason": "stop",
+			}},
+		}))
+		// Providers often send usage after finish, with an empty choices list.
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{},
+			"usage": map[string]any{
+				"prompt_tokens":     9,
+				"completion_tokens": 12,
+				"total_tokens":      21,
+			},
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	u := doneEvent(t, mustStream(t, srv.URL, ai.Request{Model: "m", Messages: []ai.Message{ai.User("hi")}})).Usage
+	if u == nil || u.Input != 9 || u.Output != 12 || u.Total != 21 {
+		t.Fatalf("usage %#v", u)
+	}
+}
+
+func TestStreamUsageAliasesAndLastObject(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta": map[string]any{"content": "a"},
+			}},
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+				"total_tokens":  2,
+			},
+		}))
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta":         map[string]any{},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{
+				"input_tokens":  5,
+				"output_tokens": 3,
+			},
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	u := doneEvent(t, mustStream(t, srv.URL, ai.Request{Model: "m", Messages: []ai.Message{ai.User("hi")}})).Usage
+	if u == nil || u.Input != 5 || u.Output != 3 || u.Total != 0 {
+		t.Fatalf("usage %#v", u)
+	}
+}
+
+func TestPromptTokensWinOverInputTokens(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta":         map[string]any{"content": "a"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{
+				"prompt_tokens":     4,
+				"input_tokens":      9,
+				"completion_tokens": 2,
+				"output_tokens":     8,
+				"total_tokens":      6,
+			},
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	u := doneEvent(t, mustStream(t, srv.URL, ai.Request{Model: "m", Messages: []ai.Message{ai.User("hi")}})).Usage
+	if u == nil || u.Input != 4 || u.Output != 2 || u.Total != 6 {
+		t.Fatalf("usage %#v", u)
+	}
+}
+
+func doneEvent(t *testing.T, evs []ai.Event) ai.Event {
+	t.Helper()
+	for _, ev := range evs {
+		if ev.Type == ai.EventError {
+			t.Fatal(ev.Err)
+		}
+		if ev.Type == ai.EventDone {
+			return ev
+		}
+	}
+	t.Fatal("no done event")
+	return ai.Event{}
 }
 
 func mustStream(t *testing.T, base string, req ai.Request) []ai.Event {
