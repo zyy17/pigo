@@ -105,7 +105,7 @@ make build
 
 终端在普通屏幕上打开聊天，不用备用缓冲区。pigo 字标只打印一次，留在回滚区里。已经完成的回合也打印在那里，所以鼠标滚轮和终端回滚能看到整段对话。长行（包括中文）按终端宽度折行。输入条、正在流出的回复和页脚会跟着窗口变宽或变窄。回复还在流出时，只重画底部：正在生成的文本、一行工作状态、灰色的 `>` 输入条，以及一行页脚。
 
-Enter 发送。输入框会立刻清空，这条消息打印进回滚区，输入条上方出现一行状态：转圈、已用时间，以及 `esc to interrupt`，直到这一轮结束。终端能区分时，Shift+Enter 换行。pigo 启动时请求 xterm 的 modifyOtherKeys，也识别 kitty 的 Shift+Enter 序列。Ctrl+J、Alt+Enter，以及行末一个 `\` 再按 Enter，在任何终端都能换行。Terminal.app，以及没有打开扩展按键的 tmux，需要用这几种方式。Esc 或 Ctrl-C 取消正在进行的任务。助手正文是淡暖黄（`#E8D9A8`）。行内代码、标题和链接是 Go 青，diff 新增是绿色，删除是红色，工具输出预览是暗色。`Ran` 那一行是粗体。`/skill:name` 装入技能，`/reset` 清空会话并打印一行分隔，`/exit` 退出。
+Enter 发送。输入框会立刻清空，这条消息打印进回滚区，输入条上方出现一行状态：转圈、已用时间，以及 `esc to interrupt`，直到这一轮结束。终端能区分时，Shift+Enter 换行。pigo 启动时请求 xterm 的 modifyOtherKeys，也识别 kitty 的 Shift+Enter 序列。Ctrl+J、Alt+Enter，以及行末一个 `\` 再按 Enter，在任何终端都能换行。Terminal.app，以及没有打开扩展按键的 tmux，需要用这几种方式。Esc 或 Ctrl-C 取消正在进行的任务。拒绝表上的 shell 命令会在执行前停住：工作行变成 `! allow this command?`，Enter 或 `y` 允许，Esc 或 `n` 拒绝。模型接着看到一条 `blocked:` 工具结果，这一轮继续。`-p` 和行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 在可信环境里跳过检查。这张表防的是模型失手。脚本、别名或 `env rm` 都能绕过。它不是沙箱。助手正文是淡暖黄（`#E8D9A8`）。行内代码、标题和链接是 Go 青，diff 新增是绿色，删除是红色，工具输出预览是暗色。`Ran` 那一行是粗体。`/skill:name` 装入技能，`/reset` 清空会话并打印一行分隔，`/exit` 退出。
 
 标准输入不是终端时，同样的命令走逐行会话。管道和测试用的就是这条路径。
 
@@ -149,10 +149,11 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 | `OPENAI_API_KEY` | 提供者是 `openai` 时的令牌 | 必填 |
 | `OPENAI_BASE_URL` | 该提供者的 API 根，通常以 `/v1` 结尾 | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-4o-mini` |
+| `PIGO_YOLO` | 设为 `1` 或 `true` 时，危险 shell 命令不再询问 | 关闭 |
 
-`--print`（`-p`）、`--base-url`、`--model` 和 `--workspace`（`-w`）覆盖环境变量。API 密钥不做成命令行参数，避免进 shell 历史。
+`--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）和 `--yolo` 覆盖环境变量。API 密钥不做成命令行参数，避免进 shell 历史。
 
-配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。
+配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`、`yolo`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。没有传 `--yolo` 时，不会把文件里的 `yolo: true` 改回关闭。
 
 ```yaml
 provider: openai

@@ -105,7 +105,7 @@ make build
 
 A terminal opens a chat on the normal screen. The pigo wordmark is printed once and stays in the scrollback. Finished turns are printed there too, so the mouse wheel and the terminal scrollback show the whole conversation. Long lines, including CJK, wrap to the terminal width. The input bar, the streaming reply, and the footer follow the window when it is resized. While a reply is streaming, only the bottom is redrawn: the text in progress, a working line, a gray `>` input bar, and a one-line footer.
 
-Enter sends. The composer clears at once, the message is printed into the scrollback, and a line above the input shows a spinner, the elapsed time, and `esc to interrupt` until the turn finishes. Shift+Enter inserts a newline when the terminal reports it. pigo asks for xterm modifyOtherKeys at startup, and it also accepts kitty's Shift+Enter sequence. Ctrl+J, Alt+Enter, and a trailing `\` before Enter insert a newline on every terminal, which is what you need in Terminal.app and in tmux unless extended keys are turned on. Esc or Ctrl-C cancels the turn in progress. Assistant prose is a soft pale yellow (`#E8D9A8`). Inline code, headings, and links are Go cyan, diff additions are green, deletions are red, and tool previews are dim. The `Ran` line is bold. `/skill:name` loads a skill, `/reset` clears the transcript and prints a separator, and `/exit` quits.
+Enter sends. The composer clears at once, the message is printed into the scrollback, and a line above the input shows a spinner, the elapsed time, and `esc to interrupt` until the turn finishes. Shift+Enter inserts a newline when the terminal reports it. pigo asks for xterm modifyOtherKeys at startup, and it also accepts kitty's Shift+Enter sequence. Ctrl+J, Alt+Enter, and a trailing `\` before Enter insert a newline on every terminal, which is what you need in Terminal.app and in tmux unless extended keys are turned on. Esc or Ctrl-C cancels the turn in progress. A shell command on the denylist pauses before it runs: the working row becomes `! allow this command?`, Enter or `y` allows it, and Esc or `n` denies it. The model then sees a `blocked:` tool result and the turn continues. `-p` and the line session deny those commands instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check in a trusted environment. The list catches model slips. A script, an alias, or `env rm` walks around it. It is not a sandbox. Assistant prose is a soft pale yellow (`#E8D9A8`). Inline code, headings, and links are Go cyan, diff additions are green, deletions are red, and tool previews are dim. The `Ran` line is bold. `/skill:name` loads a skill, `/reset` clears the transcript and prints a separator, and `/exit` quits.
 
 When stdin is not a terminal, the same commands work as a line session. That is what pipes and tests use.
 
@@ -149,10 +149,11 @@ The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They ch
 | `OPENAI_API_KEY` | Bearer token when the provider is `openai` | required |
 | `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-4o-mini` |
+| `PIGO_YOLO` | `1` or `true` runs dangerous shell commands without asking | off |
 
-Flags `--print` (`-p`), `--base-url`, `--model`, and `--workspace` (`-w`) override the environment. The API key stays out of the flags so it does not land in shell history.
+Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), and `--yolo` override the environment. The API key stays out of the flags so it does not land in shell history.
 
-Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, and `workspace`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags.
+Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspace`, and `yolo`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags. An absent `--yolo` does not turn a file's `yolo: true` back off.
 
 ```yaml
 provider: openai

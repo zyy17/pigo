@@ -66,6 +66,57 @@ sequenceDiagram
 
 轮数上限是 25 次模型调用。
 
+## 危险命令
+
+代理核心不判断命令安不安全。模型要调用工具之后、`Execute` 之前，会先走 `BeforeToolCall`。钩子可以放行、拦截，或换掉参数。被拦截的调用仍然得到一条工具结果，这一轮继续，模型可以改做法。
+
+```mermaid
+sequenceDiagram
+    participant Agent as 代理
+    participant Hook as 钩子
+    participant Tools as 工具
+    participant Model as 模型
+    Agent->>Model: 会话记录
+    Model-->>Agent: 工具调用
+    Agent->>Hook: BeforeToolCall
+    alt 拦截
+        Hook-->>Agent: 原因
+        Agent-->>Model: 工具结果，已拦截
+    else 放行
+        Hook-->>Agent: 放行
+        Agent->>Tools: 执行
+        Tools-->>Agent: 结果
+        Agent-->>Model: 工具结果
+    end
+```
+
+只有 `internal/coding` 列出危险的 shell 命令。它用一张短拒绝表匹配 `run_command`：
+
+- 对 `/`、`~` 或 `$HOME` 执行 `rm -rf`
+- `sudo`
+- `mkfs`
+- `dd` 写到磁盘设备（`of=/dev/sd*`，以及 `nvme`、`hd`、`mmcblk`、`xvd`、`vd`）
+- `git push --force`，包括 `-f`
+- `curl` 或 `wget` 通过管道送进 shell
+- fork bomb
+- `chmod -R 777 /`
+- 重定向到这些磁盘设备
+
+`rm -rf ./build` 和 `git push --force-with-lease` 不在表里。
+
+交互聊天里，命中后工作行换成确认提示：
+
+```text
+! allow this command?
+rm -rf /
+recursive delete of / or home
+enter allow · esc deny
+```
+
+Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过检查。
+
+这是一张模式拒绝表。脚本、编码、别名，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
+
 ## 测试
 
 `go test ./...` 跑单元测试和 `e2e` 里的本地端到端测试。这些测试启动一个 `httptest` 服务，按 OpenAI 兼容格式流出事件（含工具调用），并驱动 `coding.Session`、`pigo -p` 和 Bubble Tea 模型。`go test -tags e2e ./e2e/live`（`make e2e`）对真实模型做同类任务；没有 `OPENAI_API_KEY` 或 `OPENAI_BASE_URL` 时跳过。CI 在每次 push 和 pull request 上跑本地套件。真实模型任务在 `main`、手动触发，以及本仓库自己的 pull request 上跑；仓库密钥缺失时跳过。
@@ -74,9 +125,9 @@ sequenceDiagram
 
 只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。
 
-从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`），然后是命令行参数。空值会被跳过。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示。
+从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`），然后是命令行参数。空值会被跳过。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过危险命令检查。
 
-聊天画面留在 `internal/cli`，不用备用屏幕。字标和已经完成的回合打印进终端回滚区，画面只重画正在流出的回复、灰色输入条和一行页脚。文本按终端宽度折行。`Agent.Prompt` 收到的仍然只是文本。
+聊天画面留在 `internal/cli`，不用备用屏幕。字标和已经完成的回合打印进终端回滚区，画面只重画正在流出的回复、灰色输入条和一行页脚。文本按终端宽度折行。危险命令会暂时用确认提示换掉工作行。`Agent.Prompt` 收到的仍然只是文本。
 
 ## 工具和工作区
 
@@ -84,7 +135,7 @@ sequenceDiagram
 
 `read_file` 多一条许可。工作区检查失败后，它仍可以打开已发现技能目录中的文件。`~/.pi/agent/skills` 里的技能就是这样被读到的。`write_file` 和 `edit_file` 没有这条许可。
 
-`run_command` 启动的 shell 以工作区为当前目录。它是普通进程。环境里的 `OPENAI_API_KEY` 会被去掉。
+`run_command` 启动的 shell 以工作区为当前目录。它是普通进程。环境里的 `OPENAI_API_KEY` 会被去掉。[危险命令](#危险命令) 里的拒绝表可以在进程启动前拦住这条命令。
 
 ## 技能
 
