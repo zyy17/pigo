@@ -269,6 +269,51 @@ func TestMissingAPIKey(t *testing.T) {
 	}
 }
 
+func TestStreamNullUsageStaysUnset(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta":         map[string]any{"content": "Hi"},
+				"finish_reason": "stop",
+			}},
+			"usage": nil,
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	u := doneEvent(t, mustStream(t, srv.URL, ai.Request{Model: "m", Messages: []ai.Message{ai.User("hi")}})).Usage
+	if u != nil {
+		t.Fatalf("null usage became %#v", u)
+	}
+}
+
+func TestNullUsageDoesNotEraseEarlierCounts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta": map[string]any{"content": "Hi"},
+			}},
+			"usage": map[string]any{
+				"prompt_tokens":     2,
+				"completion_tokens": 1,
+				"total_tokens":      3,
+			},
+		}))
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{},
+			"usage":   nil,
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	u := doneEvent(t, mustStream(t, srv.URL, ai.Request{Model: "m", Messages: []ai.Message{ai.User("hi")}})).Usage
+	if u == nil || u.Input != 2 || u.Output != 1 || u.Total != 3 {
+		t.Fatalf("usage %#v", u)
+	}
+}
+
 func TestStreamUsage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeSSE(w, chunk(map[string]any{

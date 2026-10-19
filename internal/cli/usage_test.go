@@ -60,6 +60,17 @@ func TestRenderPrintsUsage(t *testing.T) {
 	}
 
 	buf.Reset()
+	render(&buf, agent.Event{Type: agent.MessageUpdate, TextDelta: "ok"})
+	render(&buf, agent.Event{
+		Type:    agent.MessageEnd,
+		Message: ai.Assistant("ok", ai.StopStop),
+		Session: &ai.Usage{Input: 1200, Output: 90},
+	})
+	if strings.Contains(buf.String(), " in · ") {
+		t.Fatalf("omitted call printed the session:\n%s", buf.String())
+	}
+
+	buf.Reset()
 	render(&buf, agent.Event{Type: agent.MessageEnd, Message: ai.Assistant("ok", ai.StopStop)})
 	if strings.Contains(buf.String(), " in · ") {
 		t.Fatalf("omitted usage was printed:\n%s", buf.String())
@@ -71,6 +82,10 @@ func TestFooterShowsUsage(t *testing.T) {
 	m.resize(140, 24)
 	if strings.Contains(ansi.Strip(m.View().Content), " in · ") {
 		t.Fatalf("footer invented usage:\n%s", ansi.Strip(m.View().Content))
+	}
+	blank := ansi.Strip(styleFooter("ready", "glm-5.3", "/tmp/pigo", "", 140))
+	if strings.Contains(blank, " in") || strings.Contains(blank, "out") {
+		t.Fatalf("empty token segment rendered: %s", blank)
 	}
 
 	m.apply(agent.Event{
