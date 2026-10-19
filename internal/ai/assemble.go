@@ -14,11 +14,14 @@ type callBuf struct {
 }
 
 // accumulator folds streaming deltas into one assistant message.
+// usage is the latest usage object on this call. Chunks are not added together.
 type accumulator struct {
-	text   strings.Builder
-	calls  []callBuf
-	index  map[int]int
-	finish string
+	text     strings.Builder
+	calls    []callBuf
+	index    map[int]int
+	finish   string
+	usage    Usage
+	hasUsage bool
 }
 
 func (a *accumulator) consume(data string, out chan<- Event) error {
@@ -28,6 +31,11 @@ func (a *accumulator) consume(data string, out chan<- Event) error {
 	}
 	if chunk.Error != nil && chunk.Error.Message != "" {
 		return errors.New(chunk.Error.Message)
+	}
+	// Usage often arrives on the last chunk, sometimes with an empty choices list.
+	if u, ok := chunk.Usage.counts(); ok {
+		a.usage = u
+		a.hasUsage = true
 	}
 	if len(chunk.Choices) == 0 {
 		return nil
@@ -86,6 +94,15 @@ func (a *accumulator) message() Message {
 		})
 	}
 	return Assistant(a.text.String(), finishReason(a.finish, len(calls)), calls...)
+}
+
+func (a *accumulator) doneEvent() Event {
+	ev := Event{Type: EventDone, Message: a.message()}
+	if a.hasUsage {
+		u := a.usage
+		ev.Usage = &u
+	}
+	return ev
 }
 
 func finishReason(finish string, calls int) StopReason {

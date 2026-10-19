@@ -176,7 +176,10 @@ A one-shot run prints the same stream the chat shows:
 → write_file {"path":"hello.txt","content":"hi"}
 ← wrote hello.txt (2 bytes)
 Created hello.txt.
+120 in · 40 out
 ```
+
+That last line appears only when the provider reports token usage. The chat status line shows the session total in the same words (`1.2K in · 340 out`) and stays blank otherwise. Counts are not saved, and pigo does not price them.
 
 ## Out of scope
 

@@ -95,7 +95,7 @@ func TestChatLayout(t *testing.T) {
 }
 
 func TestFooterFitsNarrowAndWide(t *testing.T) {
-	short := ansi.Strip(styleFooter("ready", "glm-5.3", "/tmp/pigo-live", 80))
+	short := ansi.Strip(styleFooter("ready", "glm-5.3", "/tmp/pigo-live", "", 80))
 	if ansi.StringWidth(short) > 80 {
 		t.Fatalf("short footer is %d cols: %s", ansi.StringWidth(short), short)
 	}
@@ -107,12 +107,12 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 	if strings.Contains(short, "esc to interrupt") {
 		t.Fatalf("idle footer offers interrupt: %s", short)
 	}
-	busy := ansi.Strip(styleFooter("working", "glm-5.3", "/tmp/pigo-live", 120))
+	busy := ansi.Strip(styleFooter("working", "glm-5.3", "/tmp/pigo-live", "", 120))
 	if !strings.Contains(busy, "esc to interrupt") {
 		t.Fatalf("working footer missing interrupt: %s", busy)
 	}
 
-	long := ansi.Strip(styleFooter("working", strings.Repeat("m", 40), strings.Repeat("x", 80), 80))
+	long := ansi.Strip(styleFooter("working", strings.Repeat("m", 40), strings.Repeat("x", 80), "", 80))
 	if ansi.StringWidth(long) > 80 {
 		t.Fatalf("long footer is %d cols: %s", ansi.StringWidth(long), long)
 	}

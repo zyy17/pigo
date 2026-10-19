@@ -141,6 +141,9 @@ func (s *Session) Root() string { return s.root }
 // Model is the model name sent on each request.
 func (s *Session) Model() string { return s.model }
 
+// Usage returns the latest model call and the session sum.
+func (s *Session) Usage() agent.Usage { return s.agent.Usage() }
+
 // Skills returns the discovered skills in menu order.
 func (s *Session) Skills() []skills.Skill {
 	out := make([]skills.Skill, len(s.skills))

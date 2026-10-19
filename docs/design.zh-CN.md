@@ -46,6 +46,8 @@ OpenAI chat completions 的形状不同：工具调用嵌在 `function` 里，�
 
 系统提示在构造请求时附上。它不写入会话记录，所以 `Reset` 可以丢掉消息，同时留下提示、模型和工具。
 
+流式请求会带上 `stream_options.include_usage`。某个 chunk 带有 `usage` 时，累加器保留最后一次：`prompt_tokens` 或 `input_tokens`，`completion_tokens` 或 `output_tokens`，以及提供方给出的 `total_tokens`。同一次调用里的用量不会相加。助手的 `message_end` 带上这一次调用和会话合计。状态栏用 Codex 的写法显示会话合计（`1.2K in · 340 out`）；提供方没有给用量时不显示。`-p` 和逐行会话在某次调用带了用量时打一行。用量不落盘，也没有价目表。
+
 ## 代理循环
 
 ```mermaid

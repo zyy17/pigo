@@ -80,7 +80,16 @@ func (m *chatModel) chromeAbove() []string {
 }
 
 func (m *chatModel) footer() string {
-	return styleFooter(m.statusWord(), m.modelName, m.root, m.width)
+	return styleFooter(m.statusWord(), m.modelName, m.root, m.tokenLabel(), m.width)
+}
+
+// tokenLabel is the session token pair on the status line.
+// It stays empty until a provider sends usage.
+func (m *chatModel) tokenLabel() string {
+	if !m.usageSet {
+		return ""
+	}
+	return tokenSegment(m.usageIn, m.usageOut)
 }
 
 // workingRow is the activity line above the composer: spinner, elapsed time,
@@ -115,8 +124,8 @@ func footerKeys(state string) string {
 	return "enter send · shift+enter newline · /exit"
 }
 
-func styleFooter(state, model, root string, width int) string {
-	left, right := footerSides(state, model, root, width)
+func styleFooter(state, model, root, tokens string, width int) string {
+	left, right := footerSides(state, model, root, tokens, width)
 	if right == "" {
 		return statusStyle(state).Render(left)
 	}
@@ -134,10 +143,11 @@ func statusStyle(state string) lipgloss.Style {
 	}
 }
 
-// footerSides is the status, model, and path on the left, and the keys on
-// the right. The left side shrinks first.
-func footerSides(state, model, root string, width int) (string, string) {
-	left := oneLine(state) + " · " + oneLine(model) + " · " + oneLine(root)
+// footerSides is the status, model, token counts, and path on the left,
+// and the keys on the right. The left side shrinks first.
+// Token counts use the Codex status-line words and stay off when unknown.
+func footerSides(state, model, root, tokens string, width int) (string, string) {
+	left := joinMeta(state, model, tokens, root)
 	right := footerKeys(state)
 	sep := ansi.StringWidth(" · ")
 	room := width - ansi.StringWidth(right) - sep
@@ -268,6 +278,21 @@ func afterCarriage(line string) string {
 
 func oneLine(s string) string {
 	return strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+}
+
+func joinMeta(parts ...string) string {
+	var b strings.Builder
+	for _, part := range parts {
+		part = oneLine(part)
+		if part == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteString(part)
+	}
+	return b.String()
 }
 
 func stackHeight(parts []string) int {
