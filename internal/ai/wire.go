@@ -3,7 +3,6 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // These types mirror the OpenAI chat-completions JSON. Each one is a single
@@ -121,16 +120,12 @@ func assistantWire(msg Message) wireMessage {
 		wire.Content = strPtr(msg.Text)
 	}
 	for _, call := range msg.ToolCalls {
-		args := strings.TrimSpace(string(call.Arguments))
-		if args == "" {
-			args = "{}"
-		}
 		wire.ToolCalls = append(wire.ToolCalls, wireToolCall{
 			ID:   call.ID,
 			Type: "function",
 			Function: wireFunction{
 				Name:      call.Name,
-				Arguments: args,
+				Arguments: string(call.Arguments),
 			},
 		})
 	}
@@ -152,32 +147,3 @@ func wireTools(tools []Tool) []wireTool {
 }
 
 func strPtr(s string) *string { return &s }
-
-// streamDelta is the piece of one SSE payload the accumulator stores.
-type streamDelta struct {
-	text    string
-	calls   []wireDeltaCall
-	finish  string
-	errText string
-}
-
-func decodeChunk(data string) (streamDelta, error) {
-	var chunk wireChunk
-	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-		return streamDelta{}, fmt.Errorf("bad stream chunk: %w", err)
-	}
-	out := streamDelta{}
-	if chunk.Error != nil {
-		out.errText = chunk.Error.Message
-	}
-	if len(chunk.Choices) == 0 {
-		return out, nil
-	}
-	choice := chunk.Choices[0]
-	if choice.FinishReason != nil {
-		out.finish = *choice.FinishReason
-	}
-	out.text = choice.Delta.Content
-	out.calls = choice.Delta.ToolCalls
-	return out, nil
-}
