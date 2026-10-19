@@ -162,13 +162,13 @@ func (m *chatModel) resize(width, height int) tea.Cmd {
 }
 
 func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
-	switch strings.ToLower(text) {
-	case "":
+	switch sessionCommand(text) {
+	case cmdEmpty:
 		return m, nil
-	case "/exit", "exit", "quit", "/quit":
+	case cmdQuit:
 		m.quitting = true
 		return m, tea.Quit
-	case "/reset":
+	case cmdReset:
 		m.session.Reset()
 		m.live = ""
 		m.comp.clear()

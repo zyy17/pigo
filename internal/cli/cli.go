@@ -31,7 +31,7 @@ Environment:
   PIGO_PROVIDER     chat backend (default openai)
   OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
   OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
-  OPENAI_MODEL      model name that endpoint accepts (default gpt-5.6-luna)
+  OPENAI_MODEL      model name that endpoint accepts (default %s)
   PIGO_YOLO         set to 1 or true to skip the dangerous-command check
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
@@ -57,7 +57,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "pigo",
 		Short:         "a small coding agent",
-		Long:          longHelp,
+		Long:          fmt.Sprintf(longHelp, config.DefaultModel),
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -68,7 +68,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&flags.Prompt, "print", "p", "", "run one prompt and exit")
 	cmd.Flags().StringVarP(&flags.Workspace, "workspace", "w", "", "workspace directory (default: current directory)")
-	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or gpt-5.6-luna)")
+	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or "+config.DefaultModel+")")
 	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
 	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "run dangerous shell commands without asking")
 	return cmd
@@ -95,8 +95,6 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 	app := &app{session: session, in: in, out: out}
 	if cfg.Prompt != "" {
 		session.Subscribe(func(ev agent.Event) { render(out, ev) })
-		stop := app.watchSignals()
-		defer stop()
 		return app.runLine(cfg.Prompt)
 	}
 	if interactiveTerminal(in, out) {
@@ -121,26 +119,6 @@ type app struct {
 	out     io.Writer
 }
 
-func (a *app) watchSignals() func() {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	done := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-sig:
-				a.session.Abort()
-			}
-		}
-	}()
-	return func() {
-		signal.Stop(sig)
-		close(done)
-	}
-}
-
 func (a *app) repl() error {
 	fmt.Fprintf(a.out, "pigo  workspace %s  model %s\n", a.session.Root(), a.session.Model())
 	fmt.Fprintln(a.out, "Enter a task. /skill:name loads a skill. /exit quits. /reset clears the transcript.")
@@ -154,12 +132,12 @@ func (a *app) repl() error {
 			return sc.Err()
 		}
 		line := strings.TrimSpace(sc.Text())
-		switch line {
-		case "":
+		switch sessionCommand(line) {
+		case cmdEmpty:
 			continue
-		case "/exit", "exit", "quit", "/quit":
+		case cmdQuit:
 			return nil
-		case "/reset":
+		case cmdReset:
 			a.session.Reset()
 			fmt.Fprintln(a.out, "transcript cleared")
 			continue
@@ -183,7 +161,29 @@ func (a *app) runLine(line string) error {
 }
 
 func (a *app) prompt(text string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Ctrl+C cancels this turn in -p and in the line REPL. The chat screen
+	// handles that key itself and does not call prompt.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	return a.session.Prompt(ctx, text)
+}
+
+const (
+	cmdEmpty = "empty"
+	cmdQuit  = "quit"
+	cmdReset = "reset"
+)
+
+// sessionCommand is the slash table shared by the chat screen and the REPL.
+func sessionCommand(line string) string {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "":
+		return cmdEmpty
+	case "/exit", "exit", "quit", "/quit":
+		return cmdQuit
+	case "/reset":
+		return cmdReset
+	default:
+		return ""
+	}
 }
