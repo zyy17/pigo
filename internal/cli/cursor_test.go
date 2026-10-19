@@ -212,10 +212,13 @@ func TestStyledFooterMatchesPlainWidth(t *testing.T) {
 	if ansi.StringWidth(styled) != ansi.StringWidth(plain) || ansi.StringWidth(styled) > 80 {
 		t.Fatalf("styled width %d plain %d", ansi.StringWidth(styled), ansi.StringWidth(plain))
 	}
-	for _, want := range []string{"glm-5.3", "esc to interrupt", "/exit"} {
+	for _, want := range []string{"glm-5.3", "/exit"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("footer missing %q: %s", want, plain)
 		}
+	}
+	if strings.Contains(plain, "esc to interrupt") {
+		t.Fatalf("idle footer offers interrupt: %s", plain)
 	}
 	if styleFooter("ready", "m", "/tmp", 80) == styleFooter("error", "m", "/tmp", 80) {
 		t.Fatal("ready and error share one color")

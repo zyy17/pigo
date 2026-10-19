@@ -106,9 +106,14 @@ func (m *chatModel) statusWord() string {
 	return m.status
 }
 
-// footerHints uses the same interrupt key as the working row. Esc stops a
-// running turn. Ctrl-C also stops it, and quits when the turn is idle.
-const footerHints = "enter send · shift+enter newline · esc to interrupt · /exit"
+// footerKeys is the status-bar reminder. Esc interrupts only while a turn
+// is running. Idle Esc jumps back or dismisses the menu, and Ctrl-C quits.
+func footerKeys(state string) string {
+	if state == "working" {
+		return "enter send · shift+enter newline · esc to interrupt · /exit"
+	}
+	return "enter send · shift+enter newline · /exit"
+}
 
 func styleFooter(state, model, root string, width int) string {
 	left, right := footerSides(state, model, root, width)
@@ -133,7 +138,7 @@ func statusStyle(state string) lipgloss.Style {
 // the right. The left side shrinks first.
 func footerSides(state, model, root string, width int) (string, string) {
 	left := oneLine(state) + " · " + oneLine(model) + " · " + oneLine(root)
-	right := footerHints
+	right := footerKeys(state)
 	sep := ansi.StringWidth(" · ")
 	room := width - ansi.StringWidth(right) - sep
 	if room < 1 {
