@@ -41,7 +41,7 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 		t.Fatal("a request should send")
 	}
 
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	m.skills = list
 	m.comp.insert("/s")
@@ -89,7 +89,7 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 }
 
 func TestSuggestSitsAboveTheCaret(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	m.comp.insert("/")
 	body, x, y := m.layout()

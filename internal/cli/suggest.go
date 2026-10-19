@@ -117,9 +117,6 @@ func (m chatModel) suggestView() string {
 	items := m.matches()
 	start, end := suggestRange(len(items), m.suggestAt, suggestWindow)
 	width := m.width
-	if width < 1 {
-		width = 1
-	}
 	var b strings.Builder
 	for i := start; i < end; i++ {
 		if i > start {

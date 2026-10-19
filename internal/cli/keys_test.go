@@ -15,7 +15,7 @@ import (
 )
 
 func TestNewlineBindings(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	m.comp.insert("hello")
 

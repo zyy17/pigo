@@ -11,7 +11,7 @@ import (
 )
 
 func TestCaretColumnForCJKAndWrap(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
@@ -71,7 +71,7 @@ func lipglossHeight(s string) int {
 }
 
 func TestCursorTracksTheComposer(t *testing.T) {
-	m := readyCursorChat()
+	m := readyCursorChat(t)
 	assertCursorPrefix(t, m, "> ")
 
 	m.comp.insert("我们额")
@@ -83,7 +83,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 	m.comp.insert("我们")
 	assertCursorPrefix(t, m, "  我们")
 
-	m = readyCursorChat()
+	m = readyCursorChat(t)
 	m.comp.set(strings.Repeat("我们", 40) + " tail")
 	v := m.View()
 	plain := strings.TrimRight(ansi.Strip(cursorLine(t, v.Content, v.Cursor.Y)), " ")
@@ -98,7 +98,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 		t.Fatalf("resized caret column %d line %q", v.Cursor.X, plain)
 	}
 
-	m = readyCursorChat()
+	m = readyCursorChat(t)
 	m.comp.insert("/")
 	v = m.View()
 	if v.Cursor.X != 3 || displayPrefix(cursorLine(t, v.Content, v.Cursor.Y), v.Cursor.X) != "> /" {
@@ -117,7 +117,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 		t.Fatal("slash menu is not above the caret")
 	}
 
-	m = readyCursorChat()
+	m = readyCursorChat(t)
 	m.busy = true
 	m.started = time.Now()
 	v = m.View()
@@ -128,7 +128,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 		t.Fatal("working row missing")
 	}
 
-	m = readyCursorChat()
+	m = readyCursorChat(t)
 	var text strings.Builder
 	for i := range 80 {
 		text.WriteString("hist-")
@@ -151,8 +151,9 @@ func TestCursorTracksTheComposer(t *testing.T) {
 	}
 }
 
-func readyCursorChat() chatModel {
-	m := newChat(nil)
+func readyCursorChat(t *testing.T) chatModel {
+	t.Helper()
+	m := testChat(t)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)

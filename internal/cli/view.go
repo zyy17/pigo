@@ -91,11 +91,7 @@ func (m chatModel) chromeAbove() []string {
 }
 
 func (m chatModel) footer() string {
-	width := m.width
-	if width < 1 {
-		width = 1
-	}
-	return styleFooter(m.statusWord(), m.modelName, m.root, width)
+	return styleFooter(m.statusWord(), m.modelName, m.root, m.width)
 }
 
 // workingRow is the activity line above the composer: spinner, elapsed time,
@@ -105,9 +101,6 @@ func (m chatModel) workingRow() string {
 		return ""
 	}
 	width := m.width
-	if width < 1 {
-		width = 1
-	}
 	lead := m.spin.View()
 	if ansi.Strip(lead) == "" {
 		lead = statusWorkStyle.Render("•")
@@ -164,9 +157,6 @@ func statusStyle(state string) lipgloss.Style {
 // footerSides is the status, model, and path on the left, and the keys on
 // the right. The left side shrinks first.
 func footerSides(state, model, root string, width int) (string, string) {
-	if width < 1 {
-		return "", ""
-	}
 	left := oneLine(state) + " · " + oneLine(model) + " · " + oneLine(root)
 	right := footerHints
 	sep := ansi.StringWidth(" · ")
@@ -204,9 +194,6 @@ func (m chatModel) renderBlock(b block) string {
 // workedRule is the dim separator under a finished turn.
 func (m chatModel) workedRule(label string) string {
 	width := m.width
-	if width < 1 {
-		width = ansi.StringWidth(label) + 2
-	}
 	lead := "─ " + label + " "
 	if ansi.StringWidth(lead) >= width {
 		return dimStyle.Render(ansi.Truncate(lead, width, ""))
@@ -216,7 +203,7 @@ func (m chatModel) workedRule(label string) string {
 }
 
 func (m chatModel) paintUser(text string) string {
-	width := paneCols(m.width)
+	width := m.width
 	lines := strings.Split(wrapText(text, textCols(width)), "\n")
 	var b strings.Builder
 	// Blank rows match the composer, so the sent message looks like the
@@ -236,7 +223,7 @@ func (m chatModel) paintUser(text string) string {
 }
 
 func (m chatModel) paintAssistant(text string) string {
-	width := paneCols(m.width)
+	width := m.width
 	lines := strings.Split(styleProse(wrapText(text, textCols(width))), "\n")
 	for i, line := range lines {
 		if i == 0 {
@@ -246,13 +233,6 @@ func (m chatModel) paintAssistant(text string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
-}
-
-func paneCols(width int) int {
-	if width < 1 {
-		return 1
-	}
-	return width
 }
 
 // textCols is the width inside the "> " / "• " gutter.
@@ -265,9 +245,6 @@ func textCols(width int) int {
 
 func (m chatModel) paintLines(text string, style lipgloss.Style) string {
 	width := m.width
-	if width < 1 {
-		return style.Render(text)
-	}
 	lines := strings.Split(text, "\n")
 	var b strings.Builder
 	for i, line := range lines {

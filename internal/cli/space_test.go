@@ -25,7 +25,7 @@ func TestWordmarkProportions(t *testing.T) {
 }
 
 func TestSessionCardAndCellGaps(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
@@ -51,7 +51,7 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 	if !strings.HasPrefix(plain, "\n█") || strings.HasPrefix(plain, "\n\n") {
 		t.Fatal("wordmark should have one blank line above it")
 	}
-	short := newChat(nil)
+	short := testChat(t)
 	short.resize(80, 10)
 	if strings.HasPrefix(ansi.Strip(short.opening()), "\n") {
 		t.Fatal("a short terminal still leads with a blank wordmark line")
@@ -64,7 +64,7 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 	if ansi.StringWidth(rule) != 80 || !strings.HasPrefix(rule, "─ Worked for 17s ") {
 		t.Fatalf("rule: width %d %q", ansi.StringWidth(rule), rule)
 	}
-	wide := newChat(nil)
+	wide := testChat(t)
 	wide.resize(140, 40)
 	if w := ansi.StringWidth(ansi.Strip(wide.workedRule("Worked for 3s"))); w != 140 {
 		t.Fatalf("wide rule is %d cols", w)
@@ -102,7 +102,7 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 
 func wideCard(t *testing.T, width int) string {
 	t.Helper()
-	m := newChat(nil)
+	m := testChat(t)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(width, 40)
@@ -111,7 +111,7 @@ func wideCard(t *testing.T, width int) string {
 
 func TestComposerGapKeepsTheCaret(t *testing.T) {
 	for _, width := range []int{80, 140} {
-		m := newChat(nil)
+		m := testChat(t)
 		m.modelName = "glm-5.3"
 		m.root = "/tmp/pigo-live"
 		m.resize(width, 24)
@@ -140,7 +140,9 @@ func TestComposerGapKeepsTheCaret(t *testing.T) {
 
 func TestWorkingRowBreathingRoom(t *testing.T) {
 	for _, width := range []int{80, 110} {
-		m := newChat(nil)
+		m := testChat(t)
+		m.modelName = "glm-5.3"
+		m.root = "/tmp/pigo-live"
 		m.resize(width, 24)
 		m.busy = true
 		m.started = time.Now()
@@ -181,7 +183,9 @@ func TestWorkingRowBreathingRoom(t *testing.T) {
 		}
 	}
 
-	m := newChat(nil)
+	m := testChat(t)
+	m.modelName = "glm-5.3"
+	m.root = "/tmp/pigo-live"
 	m.resize(40, 8)
 	m.busy = true
 	m.started = time.Now()

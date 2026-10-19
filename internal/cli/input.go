@@ -104,9 +104,6 @@ func (c composer) text() string { return string(c.runes) }
 // block: y counts from the top of the block, x is the display column.
 func (m chatModel) inputBlock() (view string, x, y int) {
 	width := m.width
-	if width < 1 {
-		width = 1
-	}
 	gap := ansi.StringWidth(inputPrompt)
 	inner := width - gap
 	if m.comp.caret == len(m.comp.runes) && inner > endCaretSlack {

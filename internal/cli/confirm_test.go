@@ -9,7 +9,7 @@ import (
 )
 
 func TestConfirmPrompt(t *testing.T) {
-	m := readyChat()
+	m := readyChat(t)
 	m.busy = true
 	reply := make(chan bool, 1)
 	m.ask = &confirmReq{
@@ -49,7 +49,7 @@ func TestConfirmKeys(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			m := readyChat()
+			m := readyChat(t)
 			m.busy = true
 			reply := make(chan bool, 1)
 			m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
@@ -64,8 +64,9 @@ func TestConfirmKeys(t *testing.T) {
 	}
 }
 
-func readyChat() chatModel {
-	m := newChat(nil)
+func readyChat(t *testing.T) chatModel {
+	t.Helper()
+	m := testChat(t)
 	m.resize(80, 24)
 	return m
 }

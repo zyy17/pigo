@@ -96,18 +96,17 @@ func runTUI(session *coding.Session) error {
 }
 
 func newChat(session *coding.Session) chatModel {
-	m := chatModel{
-		session: session,
-		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(statusWorkStyle)),
-		status:  "ready",
-		scroll:  followTail,
+	return chatModel{
+		session:   session,
+		modelName: session.Model(),
+		root:      session.Root(),
+		skills:    session.Skills(),
+		spin:      spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(statusWorkStyle)),
+		status:    "ready",
+		width:     1,
+		height:    1,
+		scroll:    followTail,
 	}
-	if session != nil {
-		m.modelName = session.Model()
-		m.root = session.Root()
-		m.skills = session.Skills()
-	}
-	return m
 }
 
 // Init waits for the window size before the first frame.
@@ -150,8 +149,9 @@ func (m chatModel) onPaste(text string) (tea.Model, tea.Cmd) {
 }
 
 func (m *chatModel) resize(width, height int) tea.Cmd {
-	m.width = width
-	m.height = height
+	// One clamp. Views read m.width and m.height and do not re-check.
+	m.width = max(width, 1)
+	m.height = max(height, 1)
 	m.ready = true
 	// The transcript is wrapped again from its source on the next frame.
 	// A reading position is a line offset, so a width change can drift it.
@@ -169,9 +169,7 @@ func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case "/reset":
-		if m.session != nil {
-			m.session.Reset()
-		}
+		m.session.Reset()
 		m.live = ""
 		m.comp.clear()
 		m.addBlock(kindInfo, "— transcript cleared —")
