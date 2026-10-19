@@ -6,7 +6,7 @@ import (
 
 // queueText keeps one follow-up while a turn is running.
 // Enter must not drop the draft. A second Enter extends that same message.
-// /exit, exit, quit, and /reset are commands, not text to send later.
+// /exit, exit, quit, /reset, and /compact are commands, not text to send later.
 func (m *chatModel) queueText(text string) tea.Cmd {
 	switch sessionCommand(text) {
 	case cmdEmpty:
@@ -17,6 +17,9 @@ func (m *chatModel) queueText(text string) tea.Cmd {
 		return tea.Quit
 	case cmdReset:
 		m.addBlock(kindInfo, "still working — /reset waits")
+		return nil
+	case cmdCompact:
+		m.addBlock(kindInfo, "still working — /compact waits")
 		return nil
 	}
 	if m.queued == "" {

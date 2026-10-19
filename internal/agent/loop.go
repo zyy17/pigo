@@ -54,6 +54,11 @@ func (a *Agent) run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// Tool results from the previous pass are already stored. Compact
+		// before this call when that context passed the reserve.
+		if err := a.maybeCompact(ctx); err != nil {
+			return err
+		}
 		a.emit(Event{Type: TurnStart, Turn: turn})
 
 		msg, err := a.readAssistant(ctx)
@@ -123,6 +128,7 @@ func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 			}
 			addErr := a.add(msg)
 			last, session := a.noteCallUsage(ev.Usage)
+			a.noteAnchor(ev.Usage)
 			a.emit(Event{Type: MessageEnd, Message: msg, Usage: last, Session: session})
 			return msg, addErr
 		case ai.EventError:

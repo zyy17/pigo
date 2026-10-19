@@ -17,6 +17,9 @@ const (
 	MessageEnd    EventType = "message_end"
 	ToolStart     EventType = "tool_execution_start"
 	ToolEnd       EventType = "tool_execution_end"
+	// Compacted means older messages were summarized. The summary is not a
+	// transcript message. Usage, when set, is the summary call.
+	Compacted EventType = "compaction"
 )
 
 // Usage is the latest model call and the session sum.

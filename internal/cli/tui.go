@@ -152,6 +152,10 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case streamMsg:
 		return m, m.apply(msg.event)
+	case compactDone:
+		m.busy = false
+		m.noteEnd(msg.err)
+		return m, m.takeQueue(msg.err)
 	case confirmMsg:
 		m.ask = msg.req
 		return m, nil
@@ -214,6 +218,13 @@ func (m *chatModel) submit(text string) tea.Cmd {
 			m.addBlock(kindInfo, "previous session "+saved)
 		}
 		return nil
+	case cmdCompact:
+		instructions, _ := compactCommand(text)
+		m.busy = true
+		m.started = time.Now()
+		m.live = ""
+		m.addBlock(kindInfo, "compacting…")
+		return tea.Batch(m.runCompact(instructions), m.spin.Tick)
 	}
 	expanded, err := commandText(m.session, text)
 	if err != nil {
@@ -228,6 +239,17 @@ func (m *chatModel) submit(text string) tea.Cmd {
 	m.live = ""
 	m.addBlock(kindUser, text)
 	return tea.Batch(m.runPrompt(expanded), m.spin.Tick)
+}
+
+type compactDone struct {
+	err error
+}
+
+func (m *chatModel) runCompact(instructions string) tea.Cmd {
+	session := m.session
+	return func() tea.Msg {
+		return compactDone{err: session.Compact(context.Background(), instructions)}
+	}
 }
 
 func (m *chatModel) runPrompt(text string) tea.Cmd {
@@ -257,6 +279,9 @@ func (m *chatModel) apply(ev agent.Event) tea.Cmd {
 		m.busy = false
 		m.noteEnd(ev.Err)
 		return m.takeQueue(ev.Err)
+	case agent.Compacted:
+		m.noteUsage(ev)
+		m.addBlock(kindInfo, "compacted older messages")
 	}
 	return nil
 }

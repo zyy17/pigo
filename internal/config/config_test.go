@@ -100,6 +100,10 @@ func TestMissingFilesUseDefaults(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("OPENAI_BASE_URL", "")
 	t.Setenv("OPENAI_MODEL", "")
+	t.Setenv("PIGO_COMPACT", "")
+	t.Setenv("PIGO_CONTEXT_WINDOW", "")
+	t.Setenv("PIGO_RESERVE_TOKENS", "")
+	t.Setenv("PIGO_KEEP_RECENT_TOKENS", "")
 	cfg, err := Load(Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +116,56 @@ func TestMissingFilesUseDefaults(t *testing.T) {
 	}
 	if cfg.Yolo {
 		t.Fatal("yolo defaulted on")
+	}
+	if !cfg.Compact || cfg.ContextWindow != 128_000 || cfg.ReserveTokens != 16_384 || cfg.KeepRecentTokens != 20_000 {
+		t.Fatalf("compact defaults %#v", cfg)
+	}
+}
+
+func TestCompactBudgetPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PIGO_PROVIDER", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+	t.Setenv("PIGO_COMPACT", "")
+	t.Setenv("PIGO_CONTEXT_WINDOW", "")
+	t.Setenv("PIGO_RESERVE_TOKENS", "")
+	t.Setenv("PIGO_KEEP_RECENT_TOKENS", "")
+	body := "compact: false\ncontext_window: 1000\nreserve_tokens: 100\nkeep_recent_tokens: 50\n"
+	if err := os.WriteFile("pigo.yaml", []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Compact || cfg.ContextWindow != 1000 || cfg.ReserveTokens != 100 || cfg.KeepRecentTokens != 50 {
+		t.Fatalf("yaml %#v", cfg)
+	}
+
+	t.Setenv("PIGO_COMPACT", "1")
+	t.Setenv("PIGO_CONTEXT_WINDOW", "64000")
+	t.Setenv("PIGO_RESERVE_TOKENS", "0")
+	t.Setenv("PIGO_KEEP_RECENT_TOKENS", "10")
+	cfg, err = Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Compact || cfg.ContextWindow != 64000 || cfg.ReserveTokens != 0 || cfg.KeepRecentTokens != 10 {
+		t.Fatalf("env %#v", cfg)
+	}
+
+	t.Setenv("PIGO_CONTEXT_WINDOW", "nope")
+	if _, err := Load(Config{}); err == nil || !strings.Contains(err.Error(), "PIGO_CONTEXT_WINDOW") {
+		t.Fatal(err)
+	}
+	t.Setenv("PIGO_CONTEXT_WINDOW", "")
+	t.Setenv("PIGO_COMPACT", "maybe")
+	if _, err := Load(Config{}); err == nil || !strings.Contains(err.Error(), "PIGO_COMPACT") {
+		t.Fatal(err)
 	}
 }
 

@@ -103,7 +103,7 @@ The file is created on the first user message. Quitting without a prompt leaves 
 {"type":"message","id":"b2c3d4e5","parentId":"a1b2c3d4","timestamp":"2026-10-19T17:40:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"hi"}],"model":"gpt-5.6-luna","stopReason":"stop","timestamp":1760895602000}}
 ```
 
-Version 3 is Pi's current header. Assistant text and tool calls use Pi's content blocks (`text`, `toolCall`). A tool result uses `role: "toolResult"`. The in-memory message stays flat. This conversion is the edge of the file. The system prompt is not a line in the file. A `system` message found there is skipped, and the live prompt is attached when the request is built. Entry types other than `message` are skipped as well, including `usage`, `label`, and `compaction`. Compaction is not applied, so a file that contains a summary still sends the messages on the leaf path. A version 1 file with no `parentId` links is read in file order.
+Version 3 is Pi's current header. Assistant text and tool calls use Pi's content blocks (`text`, `toolCall`). A tool result uses `role: "toolResult"`. The in-memory message stays flat. This conversion is the edge of the file. The system prompt is not a line in the file. A `system` message found there is skipped, and the live prompt is attached when the request is built. Entry types other than `message` are skipped as transcript lines, including `usage` and `label`. A `compaction` entry on the leaf is applied, as described in [Compaction](#compaction). A version 1 file with no `parentId` links is read in file order.
 
 A tool call with no stored result is dropped on load, and so is a tool result with no call. The file is not rewritten. The next request stays valid when a tool pair was torn.
 
@@ -114,13 +114,13 @@ A tool call with no stored result is dropped on load, and so is a tool result wi
 | `--no-session` | Keep the transcript in memory. Read nothing and write nothing. |
 | `--session-dir` | Sessions root. Overrides `PIGO_SESSION_DIR` and `session_dir`. |
 
-`-c`, `--session`, and `--no-session` cannot be combined. The chat and `-p` both resume. `-p` and the line session print `resumed <id> (N messages)` when the file had messages. The chat draws those messages before the first prompt. The model request is the current system prompt, then the leaf path, then the new user message. Resume keeps the model you start with. Assistant lines record the model that wrote them.
+`-c`, `--session`, and `--no-session` cannot be combined. The chat and `-p` both resume. `-p` and the line session print `resumed <id> (N messages)` when the file had messages. The chat draws those messages before the first prompt. The model request is the current system prompt, then the leaf path, then the new user message. When the leaf has a compaction entry, the path is replaced by the summary plus the messages from `firstKeptEntryId` forward. The stored messages are still the full leaf. Resume keeps the model you start with. Assistant lines record the model that wrote them.
 
 `/reset` clears the live transcript and the in-memory token total, and the screen prints a separator. The lines above that separator stay. The previous file stays too. When a file existed, the line session prints `previous session <id>`. The next prompt creates a new file. `--continue` after a reset that sent no new prompt still opens the previous file, because the new file does not exist yet. Token counts are not in the file. After a resume or a reset they start again when the provider reports usage.
 
 Deleting a session is deleting its `.jsonl` file.
 
-A session picker, display names, branching, forking, compaction, and context edits are left out. The leaf walk is here because a file with a branch must still load the path the next request will send.
+A session picker, display names, branching, forking, and context edits are left out. The leaf walk is here because a file with a branch must still load the path the next request will send. Compaction entries on that path are applied; a summary on a side branch is not.
 
 | Topic | Choice | Alternative | Why |
 | --- | --- | --- | --- |
@@ -129,6 +129,38 @@ A session picker, display names, branching, forking, compaction, and context edi
 | Prompt | Rebuilt on each request | Store Pi system messages | The agent already keeps the prompt out of the transcript. Skills can change between runs |
 | Counts | Stay in memory | Write Pi usage entries | Usage is already shown for this process. Resume starts the total over |
 | `/reset` | New file, old file kept | Truncate the current file | Append-only matches the format. The old conversation can be opened with `--session` |
+| Compaction | Append a summary leaf | Rewrite the file | Raw messages stay. Resume sends the summary and the tail |
+
+## Compaction
+
+Auto-compact runs when the estimated context is greater than `context_window - reserve_tokens`. `/compact` does the same thing on demand, and an optional argument focuses the summary (`/compact The Parser`). The summary is one user message on the next model call. It is not stored as a transcript message, and it is not painted as an assistant reply.
+
+The estimate prefers the last chat call's provider usage, plus about four characters per token for messages added since that call. Without usage, the same character estimate covers the system prompt and the messages the next call would send. Tool schemas are left in the reserve. A summary call's usage is added to the session total and does not become the new anchor, because that call measured the summarization prompt. Compaction clears the anchor, because the old count included messages the next request will not send.
+
+The cut walks backward until `keep_recent_tokens` and lands on a user or assistant message. A tool result stays with the call that produced it. If the tail already fits, auto-compact sends the request unchanged. `/compact` then reports `nothing to compact`. `keep_recent_tokens` should stay below `context_window - reserve_tokens`. There is no model catalog, so the window is a setting. The defaults are compact on, a window of 128000, a reserve of 16384, and 20000 recent tokens. An estimate equal to the line does not compact.
+
+The summary request uses the same stream and sends no tools. The prompt asks for Pi's sections: Goal, Constraints & Preferences, Progress, Key Decisions, Next Steps, Critical Context. A later compact updates the previous summary instead of starting over. Paths from `read_file` are listed under `<read-files>`, and paths from `write_file` and `edit_file` under `<modified-files>`. Failure leaves the context unchanged. Auto-compact then stops the turn. `/compact` returns the error. Esc cancels the summary call.
+
+When a session file is open, the summary is one more appended line and becomes the leaf. `firstKeptEntryId` is the file id of the first message that stays verbatim. The messages it replaces stay in the file. The next message's `parentId` is the compaction id. Load walks the leaf, keeps every surviving message in the transcript, and sends the summary plus the messages from that id forward, including messages written after the entry. If the id is missing, the kept tail is whatever survived after the compaction entry. `/reset` drops the in-memory summary and starts a new file.
+
+File review is unchanged. Compaction runs before the model call. `write_file` and `edit_file` still go through `BeforeToolCall`.
+
+```mermaid
+flowchart LR
+  estimate["estimate context"]
+  cut["keep recent tail"]
+  summary["one summary call"]
+  leaf["append compaction leaf"]
+  next["next request: summary plus tail"]
+  estimate --> cut --> summary --> leaf --> next
+```
+
+| Topic | Choice | Alternative | Why |
+| --- | --- | --- | --- |
+| Trigger | Estimate past the reserve, or `/compact` | Compact every turn | The recent window stays verbatim until the budget is actually tight |
+| Cut | One summary, tool pairs stay together | Two summaries when a turn is split | One call is enough to read. A split turn is summarized whole |
+| File | Append the summary, keep the raw lines | Rewrite the file down to the tail | Resume can still show the old messages. The leaf walk picks the summary |
+| Left out | Branch summaries, overflow retry, extensions, pricing | A second compaction agent | Those need a tree UI or a model catalog this tree does not have |
 
 ## Dangerous commands
 
@@ -177,7 +209,7 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips this check and [file review](#file-review). The chat screen and the line REPL share one command table: `/exit`, `exit`, `quit`, `/quit`, and `/reset`.
+Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips this check and [file review](#file-review). The chat screen and the line REPL share one command table: `/compact`, `/exit`, `exit`, `quit`, `/quit`, and `/reset`. `/compact` waits until the turn ends, the same way `/reset` does.
 
 This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, `git -C`, a subshell such as `(rm -rf /)` or `$(…)`, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
 
@@ -217,7 +249,7 @@ Enter or `y` writes. Esc or `n` does not. The tool result is `blocked: file chan
 
 `internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it. `.env` and skill frontmatter each drop one pair of quotes on their own. `.env` fills empty process variables for the shell tool and does not replace a variable that is already set. The process environment is applied after `.env`, so a process value still wins.
 
-Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`, `PIGO_SESSION_DIR`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, `--yolo` skips file-change review and the dangerous-command check, and `-c` / `--session` resume a session file. `--no-session` keeps that run in memory.
+Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`, `PIGO_SESSION_DIR`, `PIGO_COMPACT`, `PIGO_CONTEXT_WINDOW`, `PIGO_RESERVE_TOKENS`, `PIGO_KEEP_RECENT_TOKENS`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, `--yolo` skips file-change review and the dangerous-command check, and `-c` / `--session` resume a session file. `--no-session` keeps that run in memory. `compact`, `context_window`, `reserve_tokens`, and `keep_recent_tokens` set the budget in [Compaction](#compaction). There is no flag for them. `PIGO_COMPACT` is `1` or `true` to turn auto-compact on, and `0` or `false` to turn it off. Manual `/compact` still runs when auto-compact is off.
 
 A chat request sends `model`, `messages`, `tools`, and `stream`. It does not send `max_tokens`, `temperature`, or `top_p`. GPT-5 reasoning models reject those fields, and leaving them off keeps other OpenAI-compatible providers on their own defaults.
 
@@ -265,4 +297,4 @@ Pi also honors ignore files, ancestor `.agents/skills` directories, and package 
 
 ## What is left out
 
-A full Pi TUI, native APIs for every vendor, the skills marketplace, session branching, the session picker, compaction, sub-agents, and telemetry. The point of the tree is the layering: transport, loop, and coding product.
+A full Pi TUI, native APIs for every vendor, the skills marketplace, session branching, the session picker, branch summarization, overflow retry, sub-agents, and telemetry. The point of the tree is the layering: transport, loop, and coding product.

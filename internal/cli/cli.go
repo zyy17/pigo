@@ -40,6 +40,7 @@ const (
 	cmdEmpty
 	cmdQuit
 	cmdReset
+	cmdCompact
 )
 
 // slashCommand is one row in the "/" menu and one exact session command.
@@ -52,6 +53,7 @@ type slashCommand struct {
 // builtins is the only list of exact session commands. The menu, help,
 // the REPL welcome, and the opening hint all read it.
 var builtins = []slashCommand{
+	{Name: "/compact", Desc: "summarize older messages", Do: cmdCompact},
 	{Name: "/reset", Desc: "clear the transcript", Do: cmdReset},
 	{Name: "/exit", Desc: "quit", Do: cmdQuit},
 }
@@ -94,12 +96,20 @@ Environment:
   OPENAI_MODEL      model name that endpoint accepts (default %s)
   PIGO_YOLO         set to 1 or true to skip file-change review and the dangerous-command check
   PIGO_SESSION_DIR  directory for session files (default ~/.pigo/sessions)
+  PIGO_COMPACT      set to 0 or false to disable auto-compact
+  PIGO_CONTEXT_WINDOW
+                    context budget in tokens (default 128000)
+  PIGO_RESERVE_TOKENS
+                    free tokens below that budget (default 16384)
+  PIGO_KEEP_RECENT_TOKENS
+                    recent tokens kept verbatim (default 20000)
 
 Sessions are saved as JSONL unless --no-session is set.
 --continue resumes the newest session for this workspace.
 --session resumes a file path, an id, or a unique id prefix.
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
+compact, context_window, reserve_tokens, and keep_recent_tokens set the same budget.
 A yolo: true key in those files skips the same checks.
 Precedence is flags, then the environment, then .env, then those files, then defaults.
 `, sessionHelp(), config.DefaultBaseURL, config.DefaultModel)
@@ -165,6 +175,12 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 		Yolo:       cfg.Yolo,
 		SessionDir: dir,
 		Resume:     resume,
+		Compact: agent.CompactSettings{
+			Enabled:          cfg.Compact,
+			ContextWindow:    cfg.ContextWindow,
+			ReserveTokens:    cfg.ReserveTokens,
+			KeepRecentTokens: cfg.KeepRecentTokens,
+		},
 	})
 	if err != nil {
 		return err
@@ -249,6 +265,16 @@ func (a *app) repl() error {
 				fmt.Fprintf(a.out, "previous session %s\n", saved)
 			}
 			continue
+		case cmdCompact:
+			instructions, _ := compactCommand(line)
+			if err := a.compact(instructions); err != nil {
+				if errors.Is(err, agent.ErrInterrupted) {
+					fmt.Fprintln(a.out, "interrupted")
+					continue
+				}
+				fmt.Fprintf(a.out, "error: %v\n", err)
+			}
+			continue
 		}
 		if err := a.runLine(line); err != nil {
 			if errors.Is(err, agent.ErrInterrupted) {
@@ -268,6 +294,12 @@ func (a *app) runLine(line string) error {
 	return a.prompt(text)
 }
 
+func (a *app) compact(instructions string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	return a.session.Compact(ctx, instructions)
+}
+
 func (a *app) prompt(text string) error {
 	// Ctrl+C cancels this turn in -p and in the line REPL. The chat screen
 	// handles that key itself and does not call prompt.
@@ -276,8 +308,28 @@ func (a *app) prompt(text string) error {
 	return a.session.Prompt(ctx, text)
 }
 
+// compactCommand reports /compact and the optional focus instructions.
+// The instructions keep their case. The command word does not.
+func compactCommand(line string) (string, bool) {
+	line = strings.TrimSpace(line)
+	const name = "/compact"
+	if strings.EqualFold(line, name) {
+		return "", true
+	}
+	if len(line) > len(name) && strings.EqualFold(line[:len(name)], name) {
+		rest := line[len(name):]
+		if rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+			return strings.TrimSpace(rest), true
+		}
+	}
+	return "", false
+}
+
 // sessionCommand is the slash table shared by the chat screen and the REPL.
 func sessionCommand(line string) command {
+	if _, ok := compactCommand(line); ok {
+		return cmdCompact
+	}
 	line = strings.ToLower(strings.TrimSpace(line))
 	if line == "" {
 		return cmdEmpty

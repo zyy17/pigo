@@ -15,12 +15,12 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 		{Name: "review", Description: "Review a change"},
 	}
 	cmds := slashCommands(list)
-	if len(cmds) != 4 || cmds[0].Name != "/reset" || cmds[2].Name != "/skill:explain-go" {
+	if len(cmds) != 5 || cmds[0].Name != "/compact" || cmds[1].Name != "/reset" || cmds[3].Name != "/skill:explain-go" {
 		t.Fatalf("commands: %#v", cmds)
 	}
 
 	all := filterCommands(cmds, "/")
-	if len(all) != 4 {
+	if len(all) != 5 {
 		t.Fatalf("/ matches %d", len(all))
 	}
 	reset := filterCommands(cmds, "/R")

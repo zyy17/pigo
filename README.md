@@ -115,7 +115,7 @@ A terminal opens the chat on the alternate screen. The keys are in [docs/tui.md]
 - A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking.
 - `write_file` and `edit_file` show a diff first, with the same keys. A denial comes back as `blocked:`, and the turn continues. `-p` and the line session deny the change (`blocked: file change needs review`) because they have no screen.
 - `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips both questions. One switch means the session does not ask, so a one-shot edit also skips the command check.
-- `/skill:name` loads a skill, `/reset` clears the live transcript and starts a new session file, and `/exit` quits.
+- `/skill:name` loads a skill, `/compact` summarizes older messages, `/reset` clears the live transcript and starts a new session file, and `/exit` quits. `/compact` waits while a turn is running. Auto-compact does the same summary when the estimate passes the reserve. The next turn sends that summary plus the recent tail. How the cut and the session file work is in [docs/design.md](docs/design.md#compaction).
 - Quitting leaves the alternate screen. A pipe uses the line session and does not change the screen.
 
 One task, then exit:
@@ -174,10 +174,14 @@ The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They ch
 | `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-5.6-luna` |
 | `PIGO_YOLO` | `1` or `true` applies file changes and dangerous shell commands without asking | off |
 | `PIGO_SESSION_DIR` | Directory for session files | `~/.pigo/sessions` |
+| `PIGO_COMPACT` | `0` or `false` disables auto-compact. `1` or `true` enables it. `/compact` still runs when auto-compact is off | on |
+| `PIGO_CONTEXT_WINDOW` | Context budget in tokens | `128000` |
+| `PIGO_RESERVE_TOKENS` | Free tokens below that budget | `16384` |
+| `PIGO_KEEP_RECENT_TOKENS` | Recent tokens kept verbatim | `20000` |
 
 Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), `--yolo`, `--continue` (`-c`), `--session`, `--no-session`, and `--session-dir` override the environment. `-c`, `--session`, and `--no-session` cannot be combined. The API key stays out of the flags so it does not land in shell history.
 
-Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspace`, `yolo`, and `session_dir`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags. An absent `--yolo` does not turn a file's `yolo: true` back off. `session_dir` is optional; an empty value uses `~/.pigo/sessions`.
+Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspace`, `yolo`, `session_dir`, `compact`, `context_window`, `reserve_tokens`, and `keep_recent_tokens`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags. An absent `--yolo` does not turn a file's `yolo: true` back off. `session_dir` is optional; an empty value uses `~/.pigo/sessions`.
 
 ```yaml
 provider: openai

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -24,20 +25,28 @@ type Config struct {
 	Before       BeforeToolCall
 	// Record runs after each transcript message is stored. The coding
 	// session uses it to append a session file. Nil keeps the transcript
-	// in memory only. SetMessages does not call Record.
+	// in memory only. SetMessages and Restore do not call Record.
 	Record func(ai.Message) error
+	// AfterCompact runs after a summary is stored in memory and before
+	// the Compacted event. The coding session appends the session-file
+	// entry here. An error rolls the summary back. Nil keeps it in memory.
+	AfterCompact func(*Compaction) error
+	Compact      CompactSettings
 }
 
 // Agent runs the tool loop. Prompt is not safe for concurrent use.
 // Abort is safe to call from another goroutine.
 type Agent struct {
-	state    State
-	stream   ai.StreamFunc
-	maxTurns int
-	before   BeforeToolCall
-	record   func(ai.Message) error
-	subs     []func(Event)
-	usage    usageTotals
+	state        State
+	stream       ai.StreamFunc
+	maxTurns     int
+	before       BeforeToolCall
+	record       func(ai.Message) error
+	afterCompact func(*Compaction) error
+	subs         []func(Event)
+	usage        usageTotals
+	anchor       contextAnchor
+	settings     CompactSettings
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -68,10 +77,12 @@ func New(cfg Config) (*Agent, error) {
 			Tools:        append([]Tool(nil), cfg.Tools...),
 			Messages:     nil,
 		},
-		stream:   cfg.Stream,
-		maxTurns: cfg.MaxTurns,
-		before:   cfg.Before,
-		record:   cfg.Record,
+		stream:       cfg.Stream,
+		maxTurns:     cfg.MaxTurns,
+		before:       cfg.Before,
+		record:       cfg.Record,
+		afterCompact: cfg.AfterCompact,
+		settings:     cfg.Compact.orDefault(),
 	}, nil
 }
 
@@ -85,22 +96,61 @@ func (a *Agent) Subscribe(fn func(Event)) {
 	a.mu.Unlock()
 }
 
-// Messages returns a copy of the transcript.
+// Messages returns a copy of the full transcript, including messages the
+// next request will not send because a compaction summary replaced them.
 func (a *Agent) Messages() []ai.Message {
 	return a.state.snapshot()
 }
 
-// SetMessages replaces the transcript. Resume uses it to install a session
-// file that is already on disk, so Record is not called.
+// SetMessages replaces the transcript and drops any compaction summary.
+// Record is not called. A session file that also has a summary uses Restore.
 func (a *Agent) SetMessages(msgs []ai.Message) {
-	a.state.Messages = append([]ai.Message(nil), msgs...)
+	a.install(msgs, nil, nil)
 }
 
-// Reset drops the transcript and the token totals.
+// Restore installs a resumed transcript. ids[i] is the session-file id of
+// msgs[i]. compact is the latest summary on the leaf; nil keeps every
+// message. The next request sends that summary plus the messages from its
+// kept boundary. Record is not called.
+func (a *Agent) Restore(msgs []ai.Message, ids []string, compact *Compaction) {
+	a.install(msgs, ids, copyCompaction(compact))
+}
+
+func (a *Agent) install(msgs []ai.Message, ids []string, compact *Compaction) {
+	a.state.Messages = append([]ai.Message(nil), msgs...)
+	a.state.compaction = compact
+	if ids != nil && len(ids) == len(msgs) {
+		a.state.ids = append([]string(nil), ids...)
+		a.state.msgSeq = len(msgs)
+		return
+	}
+	a.state.msgSeq = 0
+	a.state.ids = make([]string, len(msgs))
+	for i := range msgs {
+		a.state.msgSeq++
+		a.state.ids[i] = fmt.Sprintf("m%d", a.state.msgSeq)
+	}
+}
+
+// Compaction returns the latest summary entry.
+func (a *Agent) Compaction() (Compaction, bool) {
+	if a.state.compaction == nil {
+		return Compaction{}, false
+	}
+	c := *copyCompaction(a.state.compaction)
+	return c, true
+}
+
+// Reset drops the transcript, the summary entry, and the token totals.
 // Totals exist only in this process, so they go away with the messages.
 func (a *Agent) Reset() {
 	a.state.Messages = nil
+	a.state.ids = nil
+	a.state.msgSeq = 0
+	a.state.compactSeq = 0
+	a.state.compaction = nil
 	a.usage = usageTotals{}
+	a.anchor = contextAnchor{}
 }
 
 // Usage returns the latest model call and the session sum.
@@ -166,7 +216,9 @@ func (a *Agent) clearCancel() {
 // The message stays in memory when Record fails, so this process can keep
 // going. The file stops at the last line that was written.
 func (a *Agent) add(msg ai.Message) error {
+	a.state.msgSeq++
 	a.state.Messages = append(a.state.Messages, msg)
+	a.state.ids = append(a.state.ids, fmt.Sprintf("m%d", a.state.msgSeq))
 	if a.record == nil {
 		return nil
 	}
@@ -183,12 +235,27 @@ func (a *Agent) emit(ev Event) {
 	}
 }
 
-// request builds one model call. The system prompt is attached here and is
-// not copied into the stored transcript.
+// request builds one model call. The system prompt and, after compaction,
+// the summary are attached here. Neither is copied into the stored transcript.
 func (a *Agent) request() ai.Request {
 	return ai.Request{
 		Model:    a.state.Model,
-		Messages: ai.WithSystem(a.state.SystemPrompt, a.state.snapshot()),
+		Messages: ai.WithSystem(a.state.SystemPrompt, a.context()),
 		Tools:    a.state.schemas(),
 	}
+}
+
+// context is what the next model call sees: the summary, when there is one,
+// then the messages from the kept boundary forward.
+func (a *Agent) context() []ai.Message {
+	live := a.state.Messages[a.state.liveStart():]
+	if a.state.compaction == nil {
+		out := make([]ai.Message, len(live))
+		copy(out, live)
+		return out
+	}
+	out := make([]ai.Message, 0, len(live)+1)
+	out = append(out, summaryMessage(a.state.compaction.Summary))
+	out = append(out, live...)
+	return out
 }
