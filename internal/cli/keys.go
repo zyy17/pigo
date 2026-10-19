@@ -45,8 +45,7 @@ func (m chatModel) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Esc returns a paused transcript to the tail. The slash menu owns
 	// Esc before this, and a running turn already used it to interrupt.
 	if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) && !m.menuOpen() && m.canReturn() {
-		m.follow = true
-		m.top = 0
+		m.scroll = followTail
 		return m, nil
 	}
 	return m.onComposer(msg)
