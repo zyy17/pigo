@@ -137,7 +137,7 @@ make build
 ./pigo --no-session -p "Answer without saving this"
 ```
 
-会话是 `~/.pigo/sessions/` 下的 JSONL 文件，每个工作区一个目录。路径编码和 Pi 相同；目录是 pigo 自己的，所以两个工具不会打开对方的文件。文件如何写入和读取见 [docs/design.zh-CN.md](docs/design.zh-CN.md#会话文件)。`/reset` 清掉模型下一次会看到的内容。原来的文件还在，下一条提示才新建文件。reset 之后如果没有新的提示，`--continue` 仍会打开原来的文件。
+会话是 `~/.pigo/sessions/` 下的 JSONL 文件，每个工作区一个目录。路径编码和 Pi 相同；目录是 pigo 自己的，所以两个工具不会打开对方的文件。文件如何写入和读取见 [docs/design.zh-CN.md](docs/design.zh-CN.md#会话文件)。`/reset` 清掉模型下一次会看到的内容。原来的文件还在，下一条提示才新建文件。reset 之后如果没有新的提示，`--continue` 仍会打开原来的文件。最新的文件如果中间有坏行，继续会报错。
 
 从源码运行：
 

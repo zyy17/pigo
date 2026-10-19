@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zyy17/pigo/internal/ai"
 )
@@ -469,6 +470,99 @@ func TestSessionLoadErrors(t *testing.T) {
 	got := openPersisted(t, dir, sessions, "aaa11111", &scripted{})
 	if !containsText(got.Messages(), "only") {
 		t.Fatalf("unique prefix %#v", got.Messages())
+	}
+}
+
+func TestContinueErrorsWhenTheNewestSessionIsCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	ws := openPersisted(t, dir, sessions, "", &scripted{})
+	root := ws.Root()
+	ws.closeJournal()
+	bucket := sessionBucket(sessions, root)
+	if err := os.MkdirAll(bucket, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeAt := func(name, body string, mt time.Time) string {
+		t.Helper()
+		path := filepath.Join(bucket, name)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mt, mt); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	header := func(id string) string {
+		return `{"type":"session","version":3,"id":"` + id + `","timestamp":"2026-10-19T00:00:00.000Z","cwd":"` + jsonEscape(root) + `"}`
+	}
+	userLine := func(id, parent, text string) string {
+		parentJSON := "null"
+		if parent != "" {
+			parentJSON = `"` + parent + `"`
+		}
+		return `{"type":"message","id":"` + id + `","parentId":` + parentJSON + `,"timestamp":"2026-10-19T00:00:01.000Z","message":{"role":"user","content":"` + text + `","timestamp":1}}`
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	mid := time.Now().Add(-time.Hour)
+	writeAt("older.jsonl", header("older-session")+"\n"+userLine("u", "", "from older")+"\n", old)
+	newer := writeAt("newer.jsonl", strings.Join([]string{
+		header("newer-session"),
+		userLine("u", "", "from newer"),
+		"this is not json",
+		userLine("v", "u", "after bad"),
+		"",
+	}, "\n"), time.Now())
+	writeAt("notes.jsonl", "not a session\n", mid)
+
+	stream := func(context.Context, ai.Request) (<-chan ai.Event, error) {
+		return nil, context.Canceled
+	}
+	_, err := New(Config{
+		Workspace: dir, UserSkillsDir: t.TempDir(), Model: "fake", SessionDir: sessions, Resume: ResumeLatest, Stream: stream,
+	})
+	if err == nil || !strings.Contains(err.Error(), newer) || strings.Contains(err.Error(), "not found") {
+		t.Fatal(err)
+	}
+	_, err = New(Config{
+		Workspace: dir, UserSkillsDir: t.TempDir(), Model: "fake", SessionDir: sessions, Resume: "newer-session", Stream: stream,
+	})
+	if err == nil || !strings.Contains(err.Error(), newer) {
+		t.Fatalf("id lookup hid the corrupt file: %v", err)
+	}
+
+	// A non-session file must not block continue once the corrupt session is gone.
+	if err := os.Remove(newer); err != nil {
+		t.Fatal(err)
+	}
+	opened := openPersisted(t, dir, sessions, ResumeLatest, &scripted{})
+	if opened.SessionID() != "older-session" || !containsText(opened.Messages(), "from older") {
+		t.Fatalf("continue %s %s", opened.SessionID(), roleTexts(opened.Messages()))
+	}
+}
+
+func TestContinueKeepsATornNewestSession(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	script := &scripted{msgs: []ai.Message{ai.Assistant("kept", ai.StopStop)}}
+	session := openPersisted(t, dir, sessions, "", script)
+	if err := session.Prompt(context.Background(), "remember-apple"); err != nil {
+		t.Fatal(err)
+	}
+	path := session.SessionFile()
+	id := session.SessionID()
+	session.closeJournal()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(body, []byte(`{"type":"message","id":"torn"`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resumed := openPersisted(t, dir, sessions, ResumeLatest, &scripted{})
+	if resumed.SessionID() != id || !containsText(resumed.Messages(), "remember-apple") {
+		t.Fatalf("torn newest %s %s", resumed.SessionID(), roleTexts(resumed.Messages()))
 	}
 }
 

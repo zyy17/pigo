@@ -137,7 +137,7 @@ Resume the newest session for this workspace, or a specific one:
 ./pigo --no-session -p "Answer without saving this"
 ```
 
-Sessions are JSONL files under `~/.pigo/sessions/`, one directory per workspace. The path encoding matches Pi; the directory is pigo's, so the two tools do not open each other's files. How a file is written and loaded is in [docs/design.md](docs/design.md#sessions). `/reset` clears what the model will see next. The previous file stays, and the next prompt creates a new one. `--continue` after a reset with no new prompt still opens the previous file.
+Sessions are JSONL files under `~/.pigo/sessions/`, one directory per workspace. The path encoding matches Pi; the directory is pigo's, so the two tools do not open each other's files. How a file is written and loaded is in [docs/design.md](docs/design.md#sessions). `/reset` clears what the model will see next. The previous file stays, and the next prompt creates a new one. `--continue` after a reset with no new prompt still opens the previous file. If the newest file has a bad line in the middle, continue reports that error.
 
 From source:
 
