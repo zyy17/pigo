@@ -1,6 +1,7 @@
 package coding
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,10 +47,10 @@ func (w *Workspace) Root() string {
 func (w *Workspace) Resolve(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", fmt.Errorf("path is empty")
+		return "", errors.New("path is empty")
 	}
 	if strings.ContainsRune(path, 0) {
-		return "", fmt.Errorf("path is invalid")
+		return "", errors.New("path is invalid")
 	}
 
 	abs := path

@@ -33,9 +33,6 @@ type Config struct {
 	Stream        ai.StreamFunc
 	// Yolo skips the dangerous-command check.
 	Yolo bool
-	// Confirm, when set, is asked before a matched command runs.
-	// A nil Confirm denies the command.
-	Confirm func(ctx context.Context, command, reason string) (bool, error)
 }
 
 // Session is one coding-agent conversation in a workspace.
@@ -66,11 +63,10 @@ func New(cfg Config) (*Session, error) {
 	found := skills.Discover(ws.Root(), userDir)
 	// The hook closes over this session so Confirm can be set after New.
 	session := &Session{
-		root:    ws.Root(),
-		model:   cfg.Model,
-		skills:  found,
-		yolo:    cfg.Yolo,
-		confirm: cfg.Confirm,
+		root:   ws.Root(),
+		model:  cfg.Model,
+		skills: found,
+		yolo:   cfg.Yolo,
 	}
 	ag, err := agent.New(agent.Config{
 		SystemPrompt: buildSystemPrompt(ws.Root(), found),

@@ -37,6 +37,9 @@ func TestRiskyCommand(t *testing.T) {
 		":(){ :|:& };:",
 		"chmod -R 777 /",
 		"chmod -R 777 /*",
+		"chmod -R 777 -- /",
+		"chmod 777 -R /",
+		"chmod -R -- 777 /",
 		"echo x > /dev/sda",
 		"echo x >/dev/nvme0n1",
 		"true && rm -rf /",
@@ -59,6 +62,7 @@ func TestRiskyCommand(t *testing.T) {
 		"chmod 644 main.go",
 		"chmod -R 755 ./build",
 		"chmod -R 777 ./build",
+		"chmod -- -R 777 /",
 		"echo sudo",
 		"echo mkfs",
 		`echo "a && rm -rf /"`,
@@ -149,12 +153,12 @@ func scriptedSession(t *testing.T, dir string, yolo bool, confirm func(context.C
 		Workspace:     dir,
 		UserSkillsDir: t.TempDir(),
 		Yolo:          yolo,
-		Confirm:       confirm,
 		Stream:        scriptStream(msgs...),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	session.SetConfirm(confirm)
 	return session
 }
 

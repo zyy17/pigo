@@ -61,7 +61,7 @@ func editFile(ws *Workspace, path, old, replacement string, replaceAll bool) (st
 	content := string(data)
 	count := strings.Count(content, old)
 	if count == 0 {
-		return "", fmt.Errorf("old_string was not found")
+		return "", errors.New("old_string was not found")
 	}
 	if count > 1 && !replaceAll {
 		return "", fmt.Errorf("old_string matched %d times; include more context or set replace_all", count)
