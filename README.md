@@ -70,7 +70,7 @@ The system prompt follows Pi's coding-agent sections: a short preamble, the tool
 
 ### Workspace
 
-File tools resolve every path from the workspace root, follow symlinks, and reject anything outside that root. `read_file` may also open a discovered skill directory, including `~/.pi/agent/skills`. `write_file` and `edit_file` stay inside the workspace. `run_command` starts a shell with the workspace as its working directory.
+File tools resolve every path from the workspace root, follow symlinks, and reject anything outside that root. `read_file` may also open a discovered skill directory, including `~/.pi/agent/skills`. `write_file` and `edit_file` stay inside the workspace. `run_command` starts `bash` with the workspace as its working directory. Bash is required on Unix.
 
 ### Tools
 
@@ -80,7 +80,7 @@ File tools resolve every path from the workspace root, follow symlinks, and reje
 | `write_file` | Create or overwrite a file |
 | `edit_file` | Replace an exact string once, or everywhere with `replace_all` |
 | `list_dir` | List one directory |
-| `run_command` | Run a shell command, 30 second timeout |
+| `run_command` | Run a bash command, 30 second timeout |
 
 ### Skills
 
