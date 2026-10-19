@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -17,6 +15,11 @@ import (
 // commandTimeout bounds run_command. Tests may shorten it.
 var commandTimeout = 30 * time.Second
 
+// shellWaitDelay is how long a canceled shell may keep its pipes open.
+const shellWaitDelay = 500 * time.Millisecond
+
+const maxCommandRunes = 8_000
+
 type commandArgs struct {
 	Command string `json:"command"`
 }
@@ -24,28 +27,21 @@ type commandArgs struct {
 const runCommandTool = "run_command"
 
 func commandTool(ws *Workspace) agent.Tool {
-	return agent.Tool{
-		Name:  runCommandTool,
-		Label: "run_command",
-		Description: "Execute a bash command in the current working directory. " +
-			"Returns stdout and stderr. Output is truncated. The timeout is 30 seconds.",
-		Parameters: ai.ObjectSchema(map[string]ai.Property{
+	return newTool(runCommandTool,
+		"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated. The timeout is 30 seconds.",
+		ai.ObjectSchema(map[string]ai.Property{
 			"command": ai.StringProperty("Shell command to execute"),
 		}, "command"),
-		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args commandArgs
-			if err := decodeArgs(raw, &args); err != nil {
-				return "", err
-			}
+		func(ctx context.Context, args commandArgs) (string, error) {
 			return runCommand(ctx, ws, args.Command)
 		},
-	}
+	)
 }
 
 func runCommand(ctx context.Context, ws *Workspace, command string) (string, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return "", fmt.Errorf("command is empty")
+		return "", errors.New("command is empty")
 	}
 	parent := ctx
 	ctx, cancel := context.WithTimeout(parent, commandTimeout)
@@ -55,7 +51,7 @@ func runCommand(ctx context.Context, ws *Workspace, command string) (string, err
 	cmd.Dir = ws.Root()
 	cmd.Env = shellEnv(ws.Root())
 	out, err := cmd.CombinedOutput()
-	text := clipText(string(out), 8_000)
+	text := clipText(string(out), maxCommandRunes)
 
 	if errors.Is(parent.Err(), context.Canceled) {
 		return "", parent.Err()
@@ -73,19 +69,6 @@ func runCommand(ctx context.Context, ws *Workspace, command string) (string, err
 		return "(no output)", nil
 	}
 	return text, nil
-}
-
-func newShellCommand(ctx context.Context, command string) *exec.Cmd {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", command)
-	}
-	// A shell child can keep stdout open after the shell exits.
-	// configureShell kills the whole group and bounds that wait.
-	configureShell(cmd)
-	return cmd
 }
 
 // shellEnv hides OPENAI_API_KEY and points PWD at the workspace.

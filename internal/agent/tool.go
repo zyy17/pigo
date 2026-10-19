@@ -11,7 +11,6 @@ import (
 // has no function pointer.
 type Tool struct {
 	Name        string
-	Label       string
 	Description string
 	Parameters  ai.Schema
 	Execute     func(ctx context.Context, args []byte) (string, error)

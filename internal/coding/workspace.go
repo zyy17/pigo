@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/zyy17/pigo/internal/skills"
 )
 
 // Workspace is a directory the coding tools are allowed to touch.
@@ -26,11 +28,11 @@ func Open(root string) (*Workspace, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("workspace %s is not a directory", abs)
 	}
-	real, err := filepath.EvalSymlinks(abs)
+	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
 		return nil, err
 	}
-	return &Workspace{root: real}, nil
+	return &Workspace{root: resolved}, nil
 }
 
 // Root is the absolute, symlink-resolved workspace directory.
@@ -56,29 +58,18 @@ func (w *Workspace) Resolve(path string) (string, error) {
 	}
 	abs = filepath.Clean(abs)
 
-	real, err := nearestExisting(abs)
+	resolved, err := nearestExisting(abs)
 	if err != nil {
 		return "", err
 	}
-	if !w.withinRoot(real) {
+	if !w.withinRoot(resolved) {
 		return "", fmt.Errorf("%q is outside the workspace", path)
 	}
-	return real, nil
+	return resolved, nil
 }
 
 func (w *Workspace) withinRoot(path string) bool {
-	return containsPath(w.root, path)
-}
-
-func containsPath(root, path string) bool {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
-	}
-	if rel == "." {
-		return true
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return skills.Within(w.root, path)
 }
 
 // nearestExisting resolves symlinks without requiring the final element to exist.
@@ -120,17 +111,17 @@ func readablePath(ws *Workspace, skillDirs []string, path string) (string, error
 }
 
 func resolveSkillPath(path string, roots []string) (string, error) {
-	real, err := nearestExisting(filepath.Clean(path))
+	resolved, err := nearestExisting(filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}
 	for _, root := range roots {
-		realRoot, err := nearestExisting(root)
+		resolvedRoot, err := nearestExisting(root)
 		if err != nil {
 			continue
 		}
-		if containsPath(realRoot, real) {
-			return real, nil
+		if skills.Within(resolvedRoot, resolved) {
+			return resolved, nil
 		}
 	}
 	return "", fmt.Errorf("%q is outside the workspace", path)

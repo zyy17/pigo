@@ -3,11 +3,17 @@
 package coding
 
 import (
+	"context"
 	"os/exec"
-	"time"
 )
 
 // configureShell bounds how long a canceled command may hold its pipes.
 func configureShell(cmd *exec.Cmd) {
-	cmd.WaitDelay = 500 * time.Millisecond
+	cmd.WaitDelay = shellWaitDelay
+}
+
+func newShellCommand(ctx context.Context, command string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "cmd", "/C", command)
+	configureShell(cmd)
+	return cmd
 }
