@@ -153,6 +153,18 @@ func TestRunCommand(t *testing.T) {
 	}
 }
 
+func TestClipTextKeepsTheTail(t *testing.T) {
+	if got := clipText("ok", 4); got != "ok" {
+		t.Fatalf("short %q", got)
+	}
+	if got := clipText("abcdefghiTAIL", 4); got != "…(truncated)\nTAIL" {
+		t.Fatalf("tail %q", got)
+	}
+	if got := clipText("甲乙丙丁", 2); got != "…(truncated)\n丙丁" {
+		t.Fatalf("runes %q", got)
+	}
+}
+
 func openTemp(t *testing.T) *Workspace {
 	t.Helper()
 	ws, err := Open(t.TempDir())
