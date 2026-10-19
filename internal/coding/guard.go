@@ -12,7 +12,7 @@ func riskyCommand(command string) (string, bool) {
 	if strings.Contains(compact(command), ":(){:|:&};:") {
 		return "fork bomb", true
 	}
-	for _, seg := range shellSegments(command) {
+	for _, seg := range segments(tokens(command)) {
 		if reason, ok := riskySegment(seg); ok {
 			return reason, true
 		}
@@ -29,14 +29,14 @@ func compact(s string) string {
 	}, s)
 }
 
-func riskySegment(seg string) (string, bool) {
-	if pipeToShell(seg) {
+func riskySegment(toks []string) (string, bool) {
+	if pipeToShell(toks) {
 		return "pipe into a shell", true
 	}
-	if redirectToDisk(seg) {
+	if redirectToDisk(toks) {
 		return "redirect to a disk device", true
 	}
-	name, args := commandWord(shellWords(seg))
+	name, args := commandWord(toks)
 	switch {
 	case name == "sudo":
 		return "sudo", true
@@ -55,17 +55,17 @@ func riskySegment(seg string) (string, bool) {
 	}
 }
 
-func pipeToShell(seg string) bool {
-	parts := splitOn(seg, pipeSplit)
+func pipeToShell(toks []string) bool {
+	parts := splitTokens(toks, "|")
 	if len(parts) < 2 {
 		return false
 	}
 	for i := range len(parts) - 1 {
-		left, _ := commandWord(shellWords(parts[i]))
+		left, _ := commandWord(parts[i])
 		if left != "curl" && left != "wget" {
 			continue
 		}
-		right, rest := commandWord(shellWords(parts[i+1]))
+		right, rest := commandWord(parts[i+1])
 		if isShell(right) || (right == "sudo" && sudoThenShell(rest)) {
 			return true
 		}
@@ -200,48 +200,16 @@ func isRootOrHome(path string) bool {
 	}
 }
 
-func redirectToDisk(segment string) bool {
-	r := []rune(segment)
-	inSingle, inDouble := false, false
-	for i := 0; i < len(r); i++ {
-		c := r[i]
-		switch {
-		case inSingle:
-			inSingle = c != '\''
-		case inDouble:
-			if c == '\\' && i+1 < len(r) {
-				i++
-				continue
-			}
-			inDouble = c != '"'
-		case c == '\'':
-			inSingle = true
-		case c == '"':
-			inDouble = true
-		case c == '\\' && i+1 < len(r):
-			i++
-		case c == '>':
-			for i+1 < len(r) && r[i+1] == '>' {
-				i++
-			}
-			if diskDevice(nextWord(string(r[i+1:]))) {
-				return true
-			}
+func redirectToDisk(toks []string) bool {
+	for i, tok := range toks {
+		if tok != ">" || i+1 >= len(toks) {
+			continue
+		}
+		if diskDevice(toks[i+1]) {
+			return true
 		}
 	}
 	return false
-}
-
-func nextWord(s string) string {
-	s = strings.TrimLeftFunc(s, unicode.IsSpace)
-	if s == "" {
-		return ""
-	}
-	end := strings.IndexFunc(s, unicode.IsSpace)
-	if end < 0 {
-		end = len(s)
-	}
-	return strings.Trim(s[:end], `"'`)
 }
 
 func diskDevice(path string) bool {
@@ -301,102 +269,20 @@ func isOctalMode(arg string) bool {
 	return true
 }
 
-func shellWords(s string) []string {
-	var words []string
+// tokens splits a command into words and operators. Quotes are stripped.
+// A backslash outside quotes, and a backslash inside double quotes, keeps
+// the next rune as part of the word.
+func tokens(command string) []string {
+	var out []string
 	var b strings.Builder
 	flush := func() {
 		if b.Len() == 0 {
 			return
 		}
-		words = append(words, b.String())
+		out = append(out, b.String())
 		b.Reset()
 	}
-	walkShell(s, func(c rune, quoted bool) {
-		if !quoted && (c == ' ' || c == '\t') {
-			flush()
-			return
-		}
-		b.WriteRune(c)
-	})
-	flush()
-	return words
-}
-
-func shellSegments(command string) []string {
-	return splitOn(command, segmentSplit)
-}
-
-func pipeSplit(c, next rune) bool {
-	return c == '|' && next != '|'
-}
-
-func segmentSplit(c, next rune) bool {
-	switch c {
-	case ';', '\n':
-		return true
-	case '&':
-		return next == '&'
-	case '|':
-		return next == '|'
-	default:
-		return false
-	}
-}
-
-func splitOn(s string, at func(c, next rune) bool) []string {
-	var parts []string
-	var b strings.Builder
-	flush := func() {
-		parts = append(parts, b.String())
-		b.Reset()
-	}
-	r := []rune(s)
-	inSingle, inDouble := false, false
-	for i := 0; i < len(r); i++ {
-		c := r[i]
-		next := rune(0)
-		if i+1 < len(r) {
-			next = r[i+1]
-		}
-		switch {
-		case inSingle:
-			b.WriteRune(c)
-			inSingle = c != '\''
-		case inDouble:
-			b.WriteRune(c)
-			if c == '\\' && i+1 < len(r) {
-				i++
-				b.WriteRune(r[i])
-				continue
-			}
-			inDouble = c != '"'
-		case c == '\'':
-			inSingle = true
-			b.WriteRune(c)
-		case c == '"':
-			inDouble = true
-			b.WriteRune(c)
-		case c == '\\' && i+1 < len(r):
-			b.WriteRune(c)
-			i++
-			b.WriteRune(r[i])
-		case at(c, next):
-			flush()
-			if (c == '&' && next == '&') || (c == '|' && next == '|') {
-				i++
-			}
-		default:
-			b.WriteRune(c)
-		}
-	}
-	flush()
-	return parts
-}
-
-// walkShell visits each rune of a shell word list. Quotes are stripped.
-// A backslash outside quotes keeps the next rune unquoted.
-func walkShell(s string, visit func(c rune, quoted bool)) {
-	r := []rune(s)
+	r := []rune(command)
 	inSingle, inDouble := false, false
 	for i := 0; i < len(r); i++ {
 		c := r[i]
@@ -406,27 +292,81 @@ func walkShell(s string, visit func(c rune, quoted bool)) {
 				inSingle = false
 				continue
 			}
-			visit(c, true)
+			b.WriteRune(c)
 		case inDouble:
 			if c == '\\' && i+1 < len(r) {
 				i++
-				visit(r[i], true)
+				b.WriteRune(r[i])
 				continue
 			}
 			if c == '"' {
 				inDouble = false
 				continue
 			}
-			visit(c, true)
+			b.WriteRune(c)
 		case c == '\'':
 			inSingle = true
 		case c == '"':
 			inDouble = true
 		case c == '\\' && i+1 < len(r):
 			i++
-			visit(r[i], true)
+			b.WriteRune(r[i])
+		case c == ' ' || c == '\t':
+			flush()
+		case c == '\n' || c == ';':
+			flush()
+			out = append(out, string(c))
+		case c == '&' && i+1 < len(r) && r[i+1] == '&':
+			flush()
+			i++
+			out = append(out, "&&")
+		case c == '|' && i+1 < len(r) && r[i+1] == '|':
+			flush()
+			i++
+			out = append(out, "||")
+		case c == '|':
+			flush()
+			out = append(out, "|")
+		case c == '>':
+			flush()
+			for i+1 < len(r) && r[i+1] == '>' {
+				i++
+			}
+			out = append(out, ">")
 		default:
-			visit(c, false)
+			b.WriteRune(c)
 		}
 	}
+	flush()
+	return out
+}
+
+func segments(toks []string) [][]string {
+	var segs [][]string
+	var cur []string
+	for _, tok := range toks {
+		if tok == ";" || tok == "\n" || tok == "&&" || tok == "||" {
+			segs = append(segs, cur)
+			cur = nil
+			continue
+		}
+		cur = append(cur, tok)
+	}
+	segs = append(segs, cur)
+	return segs
+}
+
+func splitTokens(toks []string, sep string) [][]string {
+	var parts [][]string
+	var cur []string
+	for _, tok := range toks {
+		if tok == sep {
+			parts = append(parts, cur)
+			cur = nil
+			continue
+		}
+		cur = append(cur, tok)
+	}
+	parts = append(parts, cur)
+	return parts
 }
