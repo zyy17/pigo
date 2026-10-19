@@ -191,8 +191,9 @@ func (m *chatModel) submit(text string) tea.Cmd {
 }
 
 func (m *chatModel) runPrompt(text string) tea.Cmd {
+	session := m.session
 	return func() tea.Msg {
-		_ = m.session.Prompt(context.Background(), text)
+		_ = session.Prompt(context.Background(), text)
 		return nil
 	}
 }

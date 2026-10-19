@@ -144,13 +144,9 @@ func paintSuggest(cmd slashCommand, width int, selected bool) string {
 	room := width - ansi.StringWidth(cmd.Name) - len(gap)
 	line := cmd.Name
 	if room > 0 && cmd.Desc != "" {
-		desc := cmd.Desc
-		if ansi.StringWidth(desc) > room {
-			desc = ansi.Truncate(desc, room, "…")
-		}
-		line += gap + desc
-	} else if ansi.StringWidth(line) > width {
-		line = ansi.Truncate(line, width, "…")
+		line += gap + fitLine(cmd.Desc, room)
+	} else {
+		line = fitLine(line, width)
 	}
 	pad := width - ansi.StringWidth(line)
 	if pad > 0 {

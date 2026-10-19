@@ -184,13 +184,9 @@ func caretColumn(prefix string, line []rune, col int) int {
 }
 
 func paintBar(line string, width int) string {
-	w := ansi.StringWidth(line)
-	if w > width {
-		line = ansi.Truncate(line, width, "")
-		w = ansi.StringWidth(line)
-	}
-	if w < width {
-		line += strings.Repeat(" ", width-w)
+	line = fitLine(line, width)
+	if pad := width - ansi.StringWidth(line); pad > 0 {
+		line += strings.Repeat(" ", pad)
 	}
 	return barStyle.Render(line)
 }

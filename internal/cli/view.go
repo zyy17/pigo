@@ -99,10 +99,7 @@ func (m *chatModel) workingRow() string {
 	}
 	clock := fmtElapsed(time.Since(m.started))
 	line := lead + " " + statusWorkStyle.Render("Working") + " " + dimStyle.Render("("+clock+" • esc to interrupt)")
-	if ansi.StringWidth(line) > width {
-		return ansi.Truncate(line, width, "…")
-	}
-	return line
+	return fitLine(line, width)
 }
 
 func (m *chatModel) statusWord() string {
@@ -145,10 +142,7 @@ func footerSides(state, model, root string, width int) (string, string) {
 	if room < 1 {
 		return ansi.Truncate(left, width, "…"), ""
 	}
-	if ansi.StringWidth(left) > room {
-		left = ansi.Truncate(left, room, "…")
-	}
-	return left, right
+	return fitLine(left, room), right
 }
 
 func (m *chatModel) renderBlock(b block) string {

@@ -30,7 +30,6 @@ const version = "0.1.0"
 const (
 	skillName = "/skill:name"
 	skillDesc = "load that skill, then an optional request"
-	skillHint = "loads a skill"
 )
 
 // command is what a typed line asks the session to do.
@@ -47,15 +46,14 @@ const (
 type slashCommand struct {
 	Name string
 	Desc string
-	Hint string
 	Do   command
 }
 
 // builtins is the only list of exact session commands. The menu, help,
 // the REPL welcome, and the opening hint all read it.
 var builtins = []slashCommand{
-	{Name: "/reset", Desc: "clear the transcript", Hint: "clears the chat", Do: cmdReset},
-	{Name: "/exit", Desc: "quit", Hint: "quits", Do: cmdQuit},
+	{Name: "/reset", Desc: "clear the transcript", Do: cmdReset},
+	{Name: "/exit", Desc: "quit", Do: cmdQuit},
 }
 
 // commandAlias covers the quit words that are not themselves menu rows.
@@ -77,9 +75,9 @@ func sessionHelp() string {
 
 func hintText() string {
 	parts := make([]string, 0, 1+len(builtins))
-	parts = append(parts, skillName+" "+skillHint)
+	parts = append(parts, skillName+" "+skillDesc)
 	for _, cmd := range builtins {
-		parts = append(parts, cmd.Name+" "+cmd.Hint)
+		parts = append(parts, cmd.Name+" "+cmd.Desc)
 	}
 	return strings.Join(parts, ". ") + "."
 }
