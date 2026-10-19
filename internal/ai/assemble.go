@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -17,32 +18,30 @@ type accumulator struct {
 	calls  []callBuf
 	index  map[int]int
 	finish string
-	done   bool
 }
 
 func (a *accumulator) consume(data string, out chan<- Event) error {
-	chunk, err := parseChunk(data)
+	chunk, err := decodeChunk(data)
 	if err != nil {
-		return fmt.Errorf("bad stream chunk: %w", err)
+		return err
 	}
-	if chunk.ErrorMessage != "" {
-		return fmt.Errorf("%s", chunk.ErrorMessage)
+	if chunk.errText != "" {
+		return errors.New(chunk.errText)
 	}
-	if chunk.Content != "" {
-		a.text.WriteString(chunk.Content)
-		out <- Event{Type: EventTextDelta, Text: chunk.Content}
+	if chunk.text != "" {
+		a.text.WriteString(chunk.text)
+		out <- Event{Type: EventTextDelta, Text: chunk.text}
 	}
-	for _, call := range chunk.Calls {
+	for _, call := range chunk.calls {
 		a.absorb(call)
 	}
-	if chunk.FinishReason != "" {
-		a.finish = chunk.FinishReason
-		a.done = true
+	if chunk.finish != "" {
+		a.finish = chunk.finish
 	}
 	return nil
 }
 
-func (a *accumulator) absorb(call chunkCall) {
+func (a *accumulator) absorb(call wireDeltaCall) {
 	if a.index == nil {
 		a.index = map[int]int{}
 	}
@@ -56,10 +55,10 @@ func (a *accumulator) absorb(call chunkCall) {
 	if call.ID != "" {
 		dst.id = call.ID
 	}
-	if call.Name != "" {
-		dst.name = call.Name
+	if call.Function.Name != "" {
+		dst.name = call.Function.Name
 	}
-	dst.args.WriteString(call.Arguments)
+	dst.args.WriteString(call.Function.Arguments)
 }
 
 func (a *accumulator) message() Message {

@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +21,10 @@ type Client struct {
 // The caller must read the channel until it closes, or cancel ctx.
 func (c *Client) Stream(ctx context.Context, req Request) (<-chan Event, error) {
 	if strings.TrimSpace(c.APIKey) == "" {
-		return nil, fmt.Errorf("API key is empty")
+		return nil, errors.New("API key is empty")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return nil, fmt.Errorf("model is empty")
+		return nil, errors.New("model is empty")
 	}
 	body, err := encodeRequest(req)
 	if err != nil {
