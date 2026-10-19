@@ -23,6 +23,7 @@ flowchart TD
 | Concern | File | Where to start |
 | --- | --- | --- |
 | Model and the turn | `tui.go` | `chatModel`, `runTUI`, `apply`, `submit` |
+| Queued follow-up | `queue.go` | `queueText`, `takeQueue` |
 | Keys | `keys.go` | `onKey`, `onComposer`, `continuedLine` |
 | Frame | `view.go` | `View`, `layout`, `chromeAbove`, `footer` |
 | Transcript scroll | `scroll.go` | `scrollRows`, `transcriptWindow`, `scroll` |
@@ -56,7 +57,7 @@ Short history stays at the top of the pane. The spare rows sit above the compose
 
 ## A turn
 
-Enter commits the composer, clears it, and calls `Session.Prompt`. While a turn is running the composer stays editable, and Enter queues one follow-up instead of dropping it. A second Enter appends a newline to that same message. The transcript shows it as one dim line, `↳ queued:`. `AgentEnd` sends the queue when the turn finishes, and puts it back in the composer after an interrupt or an error. `/exit` aborts and quits. `/reset` is refused until the turn ends. `/skill:name` queues like plain text. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
+Enter commits the composer, clears it, and calls `Session.Prompt`. While a turn is running the composer stays editable, and Enter queues one follow-up instead of dropping it. A second Enter appends a newline to that same message. The transcript shows it as one dim line, `↳ queued:`. `AgentEnd` sends the queue when the turn finishes and leaves a draft the user is still typing. An interrupt, an error, or Esc or Ctrl-C that lands as the turn ends puts the queue back in the composer. `/exit`, `exit`, and `quit` abort and quit. `/reset` is refused until the turn ends. `/skill:name` queues like plain text. A queued skill that fails to expand goes back into the composer. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
 
 ```mermaid
 stateDiagram-v2
@@ -66,6 +67,7 @@ stateDiagram-v2
     Confirm --> Running: allow
     Confirm --> Running: deny
     Running --> Idle: done
+    Running --> Running: done, queue sent
     Running --> Idle: abort
     Idle --> [*]: quit
 ```
