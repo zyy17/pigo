@@ -22,7 +22,6 @@ flowchart TD
     cli --> skills
     cli --> agent
     cli --> ai
-    config --> skills
     coding --> skills
     coding --> agent
     coding --> ai
@@ -110,11 +109,12 @@ make build
 ./pigo
 ```
 
-A terminal opens the chat on the alternate screen. The pigo wordmark, the session card, and the turns stay in that screen. PgUp and PgDn scroll the transcript a page at a time, keeping one line of overlap, and the mouse wheel scrolls one line. Esc returns to the latest line when nothing is running. The composer and the footer stay at the bottom. New output stays pinned there until you scroll up. Long lines, including CJK, wrap to the terminal width, and a resize wraps them again.
+A terminal opens the chat on the alternate screen. The keys are in [docs/tui.md](docs/tui.md).
 
-Enter sends. The composer clears at once, the message joins the transcript, and a line above the input shows a spinner, the elapsed time, and `esc to interrupt` until the turn finishes. The terminal cursor sits on the composer, so an input method's candidate window follows the caret. Shift+Enter inserts a newline when the terminal can tell it from Enter. Bubble Tea asks for that keyboard disambiguation (the Kitty protocol and xterm modifyOtherKeys) and turns it off on quit. Ctrl+J, Alt+Enter, and a trailing `\` before Enter insert a newline on every terminal, which is what you need when Shift+Enter arrives as a plain Enter. Esc or Ctrl-C cancels the turn in progress. A shell command on the denylist pauses before it runs: the working row becomes `! allow this command?`, Enter or `y` allows it, and Esc or `n` denies it. The model then sees a `blocked:` tool result and the turn continues. `-p` and the line session deny those commands instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check in a trusted environment. The list catches model slips. A script, an alias, or `env rm` walks around it. It is not a sandbox. Assistant prose is a soft pale yellow (`#E8D9A8`). Inline code, headings, and links are Go cyan, diff additions are green, deletions are red, and tool previews are dim. The `Ran` line is bold. `/skill:name` loads a skill, `/reset` clears the transcript and prints a separator, and `/exit` quits. Ctrl-D also quits when the composer is empty. Quitting leaves the alternate screen, so the terminal shows what was there before pigo started. The conversation is not left in the shell scrollback. A pipe or the line session does not touch the screen.
-
-When stdin is not a terminal, the same commands work as a line session. That is what pipes and tests use.
+- Enter sends. Esc or Ctrl-C cancels the turn.
+- A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check.
+- `/skill:name` loads a skill, `/reset` clears the transcript, and `/exit` quits.
+- Quitting leaves the alternate screen. A pipe uses the line session and does not change the screen.
 
 One task, then exit:
 

@@ -20,7 +20,6 @@ flowchart TD
     cli --> skills
     cli --> agent
     cli --> ai
-    config --> skills
     coding --> skills
     coding --> agent
     coding --> ai
@@ -34,7 +33,7 @@ flowchart TD
 | `internal/agent` | Transcript, the ask/act loop, calling `Tool.Execute` | HTTP, workspaces, skills |
 | `internal/coding` | Workspace, file and shell tools, the system prompt | How SSE is parsed |
 | `internal/skills` | Where `SKILL.md` lives, the short prompt list | The loop and HTTP |
-| `internal/config` | Flags, environment, `.env`, YAML. Quotes via `skills.Unquote` | The loop, HTTP, and the screen |
+| `internal/config` | Flags, environment, `.env`, YAML | The loop, HTTP, and the screen |
 | `internal/cli` | Cobra, Bubble Tea, `/skill:name`, calling `config.Load` | Path checks and the wire format |
 
 A skill never becomes a new agent type. The coding session discovers skills and either mentions them in the system prompt or, for `/skill:name`, pastes the file into an ordinary user message. `Agent.Prompt` still only sees messages and tools.
@@ -43,7 +42,7 @@ A skill never becomes a new agent type. The coding session discovers skills and 
 
 The transcript is the memory of the loop. A message has a role, text, and for the assistant a list of tool calls. A tool result is its own role, `toolResult`, and carries the tool-call ID it answers.
 
-OpenAI chat completions use a different shape: tool calls are nested under `function`, and a tool result is `role: "tool"`. `wire.go` names one Go type per JSON object. `encodeRequest` and `decodeChunk` are the only translation, and they use `json.Marshal` and `json.Unmarshal`. The rest of the program keeps the flatter transcript. Agent events use `EventType`.
+OpenAI chat completions use a different shape: tool calls are nested under `function`, and a tool result is `role: "tool"`. `wire.go` names one Go type per JSON object. `encodeRequest` writes the request, and the accumulator reads each `wireChunk`, both through `json.Marshal` and `json.Unmarshal`. The rest of the program keeps the flatter transcript.
 
 The system prompt is attached when a request is built. It is not stored in the transcript, so `Reset` can drop messages and leave the prompt, model, and tools in place.
 
@@ -130,15 +129,13 @@ This is a pattern denylist. It is easy to bypass with a script, encoding, an ali
 
 ## Configuration
 
-`internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it. It calls `skills.Unquote`, so `.env` and skill frontmatter drop quotes the same way. `.env` fills empty process variables for the shell tool and does not replace a variable that is already set. The process environment is read before that fill, which is why a process value still beats `.env`.
+`internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it. `.env` and skill frontmatter each drop one pair of quotes on their own. `.env` fills empty process variables for the shell tool and does not replace a variable that is already set. The process environment is applied after `.env`, so a process value still wins.
 
-Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, and `--yolo` skips the dangerous-command check.
+Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`), then flags. Blank values are skipped. The built-in model name and API root live in `internal/defaults`, which config and the coding session both read. The model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, and `--yolo` skips the dangerous-command check.
 
 A chat request sends `model`, `messages`, `tools`, and `stream`. It does not send `max_tokens`, `temperature`, or `top_p`. GPT-5 reasoning models reject those fields, and leaving them off keeps other OpenAI-compatible providers on their own defaults.
 
-The chat screen stays in `internal/cli`. It uses the alternate screen, as Codex does. On quit (`/exit`, Ctrl-C while idle, or Ctrl-D with an empty composer) Bubble Tea leaves that screen and the terminal shows the shell buffer from before pigo. Nothing is written after quit. The line session and `-p` do not change the screen, and a non-terminal stdout never enters the alternate screen. Bubble Tea v2 places the hardware cursor on the composer and asks the terminal for keyboard disambiguation so Shift+Enter can insert a newline.
-
-The wordmark, a bordered session card, and the turns are drawn in the transcript pane, with one blank line between cells. The composer, the slash menu, the working row, and the footer stay fixed under that pane. PgUp and PgDn scroll by the pane height minus one line. The mouse wheel scrolls one line. Esc jumps back to the latest line when the composer is idle and no slash menu is open. While the view is following, new output sticks to the bottom. A blank line sits above the footer, and the working row has one blank line above it and one below it. Enter commits the user line to the transcript and clears the composer. While the turn runs, the working row above the input shows a spinner, the elapsed time, and `esc to interrupt`. Esc during a turn interrupts it instead of jumping. A dangerous shell command replaces that row with a confirm prompt until Enter or Esc. Startup leaves one blank line before the wordmark. Shift+Enter inserts a newline when the terminal can report it; Ctrl+J, Alt+Enter, and a trailing backslash do that on terminals that cannot. Assistant prose is pale yellow `#E8D9A8`. Inline code, headings, and links are cyan, diff lines are green and red, the `Ran` header is bold, and tool previews are dim. Text wraps to the terminal width, and a resize wraps the transcript again from its source. `Agent.Prompt` still only receives the text.
+The chat screen is described in [tui.md](tui.md).
 
 ## Tools and the workspace
 
