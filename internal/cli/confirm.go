@@ -72,8 +72,5 @@ func (m *chatModel) confirmView() string {
 }
 
 func fitLine(s string, width int) string {
-	if ansi.StringWidth(s) > width {
-		return ansi.Truncate(s, width, "…")
-	}
-	return s
+	return ansi.Truncate(s, width, "…")
 }

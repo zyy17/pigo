@@ -5,8 +5,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
-
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 )
@@ -38,9 +36,5 @@ const (
 )
 
 func flattenLine(s string, width int) string {
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if width < 1 || ansi.StringWidth(s) <= width {
-		return s
-	}
-	return ansi.Truncate(s, width, "…")
+	return fitLine(oneLine(s), width)
 }
