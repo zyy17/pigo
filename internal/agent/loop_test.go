@@ -338,9 +338,10 @@ func TestUsageAccumulatesAcrossCalls(t *testing.T) {
 		msgs: []ai.Message{
 			ai.Assistant("", ai.StopToolUse, call("c1", "echo", map[string]any{})),
 			ai.Assistant("done", ai.StopStop),
+			ai.Assistant("quiet", ai.StopStop),
 			ai.Assistant("later", ai.StopStop),
 		},
-		usages: []*ai.Usage{first, nil, second},
+		usages: []*ai.Usage{first, nil, nil, second},
 	}
 	ag := newAgent(t, script, echoTool())
 	var ends []agent.Event
@@ -374,8 +375,15 @@ func TestUsageAccumulatesAcrossCalls(t *testing.T) {
 
 	ag.Reset()
 	got = ag.Usage()
-	if got.HaveLast || got.HaveSession || got.Session.Input != 0 {
+	if got.HaveLast || got.HaveSession || got.Session.Input != 0 || got.Last.Input != 0 {
 		t.Fatalf("reset %#v", got)
+	}
+	if err := ag.Prompt(context.Background(), "quiet"); err != nil {
+		t.Fatal(err)
+	}
+	got = ag.Usage()
+	if got.HaveLast || got.HaveSession || got.Session != (ai.Usage{}) {
+		t.Fatalf("omitted call after reset %#v", got)
 	}
 	if err := ag.Prompt(context.Background(), "next"); err != nil {
 		t.Fatal(err)
