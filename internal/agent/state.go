@@ -22,18 +22,39 @@ func (s State) liveStart() int {
 	if s.compaction == nil {
 		return 0
 	}
+	start := s.compaction.From
 	if s.compaction.FirstKeptID != "" {
 		if i := s.index(s.compaction.FirstKeptID); i >= 0 {
-			return i
+			start = i
 		}
 	}
-	if s.compaction.From < 0 {
-		return 0
+	if start < 0 {
+		start = 0
 	}
-	if s.compaction.From > len(s.Messages) {
-		return len(s.Messages)
+	if start > len(s.Messages) {
+		start = len(s.Messages)
 	}
-	return s.compaction.From
+	return s.pairedStart(start)
+}
+
+// pairedStart keeps a tool result with the assistant that produced it.
+// The kept id can name the result when an earlier session line never landed.
+// A result with no call just before it is not sent.
+func (s State) pairedStart(start int) int {
+	if start < 0 || start >= len(s.Messages) || s.Messages[start].Role != ai.RoleToolResult {
+		return start
+	}
+	i := start
+	for i > 0 && s.Messages[i-1].Role == ai.RoleToolResult {
+		i--
+	}
+	if i > 0 && s.Messages[i-1].Role == ai.RoleAssistant {
+		return i - 1
+	}
+	for start < len(s.Messages) && s.Messages[start].Role == ai.RoleToolResult {
+		start++
+	}
+	return start
 }
 
 func (s State) index(id string) int {

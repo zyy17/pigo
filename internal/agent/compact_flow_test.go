@@ -395,6 +395,52 @@ func TestCompactCancelLeavesContext(t *testing.T) {
 	}
 }
 
+func TestRestoredToolResultBoundaryIncludesTheCall(t *testing.T) {
+	script := &fakeModel{msgs: []ai.Message{ai.Assistant("ok", ai.StopStop)}}
+	ag := newCompactAgent(t, script, manualBudget())
+	ag.Restore([]ai.Message{
+		ai.User("old"),
+		ai.Assistant("", ai.StopToolUse, call("c1", "read_file", map[string]any{"path": "a.go"})),
+		ai.ToolResult("c1", "read_file", "package a", false),
+	}, []string{"u", "a", "r"}, &agent.Compaction{
+		ID: "c", Summary: "## Goal\nship", FirstKeptID: "r", From: 2,
+	})
+	if err := ag.Prompt(context.Background(), "next"); err != nil {
+		t.Fatal(err)
+	}
+	chat := script.reqs[0]
+	if roles(chat.Messages) != "system,user,assistant,toolResult,user" {
+		t.Fatalf("boundary %s", roles(chat.Messages))
+	}
+	if len(chat.Messages[2].ToolCalls) != 1 || chat.Messages[2].ToolCalls[0].ID != "c1" || chat.Messages[3].Text != "package a" {
+		t.Fatalf("pair %#v %#v", chat.Messages[2], chat.Messages[3])
+	}
+	if strings.Contains(chat.Messages[1].Text, "old") || chat.Messages[4].Text != "next" {
+		t.Fatalf("projection:\n%s", chat.Messages[1].Text)
+	}
+
+	script = &fakeModel{msgs: []ai.Message{ai.Assistant("ok", ai.StopStop)}}
+	ag = newCompactAgent(t, script, manualBudget())
+	ag.Restore([]ai.Message{
+		ai.ToolResult("missing", "read_file", "orphan", false),
+		ai.User("kept"),
+	}, []string{"r", "u"}, &agent.Compaction{
+		ID: "c", Summary: "## Goal\nship", FirstKeptID: "r", From: 0,
+	})
+	if err := ag.Prompt(context.Background(), "next"); err != nil {
+		t.Fatal(err)
+	}
+	chat = script.reqs[0]
+	if roles(chat.Messages) != "system,user,user,user" || chat.Messages[2].Text != "kept" || chat.Messages[3].Text != "next" {
+		t.Fatalf("orphan boundary %s", roles(chat.Messages))
+	}
+	for _, msg := range chat.Messages {
+		if msg.Role == ai.RoleToolResult {
+			t.Fatal("orphan tool result was sent")
+		}
+	}
+}
+
 func TestDisabledAutoStillCompactsManually(t *testing.T) {
 	script := &fakeModel{msgs: []ai.Message{
 		ai.Assistant("ok", ai.StopStop),
