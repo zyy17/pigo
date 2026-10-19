@@ -1,8 +1,8 @@
 // Slash menu above the composer.
 //
 // Built-in commands and discovered skills share one list. Typing "/"
-// opens it; Esc dismisses it until the next edit. Enter completes a
-// partial name and sends an exact one.
+// opens it; Esc dismisses it until the next edit. Tab and Enter both
+// complete the selected item; Enter sends an exact name.
 
 package cli
 

@@ -74,6 +74,8 @@ func (a *accumulator) message() Message {
 			id = fmt.Sprintf("call_%d", i+1)
 		}
 		args := strings.TrimSpace(call.args.String())
+		// Streaming models often omit an empty object. Fill "{}" once here.
+		// A custom StreamFunc that still yields empty args fails as invalid JSON in the agent.
 		if args == "" {
 			args = "{}"
 		}

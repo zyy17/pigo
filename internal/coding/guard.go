@@ -198,6 +198,7 @@ func diskDevice(path string) bool {
 	return false
 }
 
+// Skip FOO=bar prefixes so rm after an assignment is still recognized.
 func commandWord(words []string) (string, []string) {
 	i := 0
 	for i < len(words) && isEnvAssign(words[i]) {
