@@ -20,12 +20,68 @@ import (
 
 const version = "0.1.0"
 
-const longHelp = `pigo is a small coding agent.
+// /skill:name takes an argument, so it is a prefix rather than a row in builtins.
+const (
+	skillName = "/skill:name"
+	skillDesc = "load that skill, then an optional request"
+	skillHint = "loads a skill"
+)
 
-Inside the session:
-  /skill:name       load that skill, then an optional request
-  /reset            clear the transcript
-  /exit             quit
+// command is what a typed line asks the session to do.
+type command int
+
+const (
+	cmdPrompt command = iota
+	cmdEmpty
+	cmdQuit
+	cmdReset
+)
+
+// slashCommand is one row in the "/" menu and one exact session command.
+type slashCommand struct {
+	Name string
+	Desc string
+	Hint string
+	Do   command
+}
+
+// builtins is the only list of exact session commands. The menu, help,
+// the REPL welcome, and the opening hint all read it.
+var builtins = []slashCommand{
+	{Name: "/reset", Desc: "clear the transcript", Hint: "clears the chat", Do: cmdReset},
+	{Name: "/exit", Desc: "quit", Hint: "quits", Do: cmdQuit},
+}
+
+// commandAlias covers the quit words that are not themselves menu rows.
+var commandAlias = map[string]command{
+	"exit":  cmdQuit,
+	"quit":  cmdQuit,
+	"/quit": cmdQuit,
+}
+
+func sessionHelp() string {
+	var b strings.Builder
+	b.WriteString("Inside the session:\n")
+	fmt.Fprintf(&b, "  %-16s %s\n", skillName, skillDesc)
+	for _, cmd := range builtins {
+		fmt.Fprintf(&b, "  %-16s %s\n", cmd.Name, cmd.Desc)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func hintText() string {
+	parts := make([]string, 0, 1+len(builtins))
+	parts = append(parts, skillName+" "+skillHint)
+	for _, cmd := range builtins {
+		parts = append(parts, cmd.Name+" "+cmd.Hint)
+	}
+	return strings.Join(parts, ". ") + "."
+}
+
+func usageText() string {
+	return fmt.Sprintf(`pigo is a small coding agent.
+
+%s
 
 Environment:
   PIGO_PROVIDER     chat backend (default openai)
@@ -37,7 +93,8 @@ Environment:
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
 A yolo: true key in those files skips the same check.
 Precedence is flags, then the environment, then .env, then those files, then defaults.
-`
+`, sessionHelp(), config.DefaultModel)
+}
 
 // Run parses args and starts a session.
 func Run(args []string) error {
@@ -57,7 +114,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "pigo",
 		Short:         "a small coding agent",
-		Long:          fmt.Sprintf(longHelp, config.DefaultModel),
+		Long:          usageText(),
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -121,7 +178,7 @@ type app struct {
 
 func (a *app) repl() error {
 	fmt.Fprintf(a.out, "pigo  workspace %s  model %s\n", a.session.Root(), a.session.Model())
-	fmt.Fprintln(a.out, "Enter a task. /skill:name loads a skill. /exit quits. /reset clears the transcript.")
+	fmt.Fprintln(a.out, "Enter a task. "+hintText())
 	sc := bufio.NewScanner(a.in)
 	// The default token limit is 64KiB, which rejects a long pasted task.
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -168,22 +225,19 @@ func (a *app) prompt(text string) error {
 	return a.session.Prompt(ctx, text)
 }
 
-const (
-	cmdEmpty = "empty"
-	cmdQuit  = "quit"
-	cmdReset = "reset"
-)
-
 // sessionCommand is the slash table shared by the chat screen and the REPL.
-func sessionCommand(line string) string {
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "":
+func sessionCommand(line string) command {
+	line = strings.ToLower(strings.TrimSpace(line))
+	if line == "" {
 		return cmdEmpty
-	case "/exit", "exit", "quit", "/quit":
-		return cmdQuit
-	case "/reset":
-		return cmdReset
-	default:
-		return ""
 	}
+	if cmd, ok := commandAlias[line]; ok {
+		return cmd
+	}
+	for _, cmd := range builtins {
+		if strings.EqualFold(cmd.Name, line) {
+			return cmd.Do
+		}
+	}
+	return cmdPrompt
 }

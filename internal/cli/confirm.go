@@ -24,37 +24,37 @@ type confirmMsg struct {
 	req *confirmReq
 }
 
-func (m chatModel) answerConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *chatModel) answerConfirm(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
-		return m.finishConfirm(true), nil
+		m.finishConfirm(true)
 	case "esc":
-		return m.finishConfirm(false), nil
+		m.finishConfirm(false)
+	default:
+		switch msg.Text {
+		case "y", "Y":
+			m.finishConfirm(true)
+		case "n", "N":
+			m.finishConfirm(false)
+		}
 	}
-	switch msg.Text {
-	case "y", "Y":
-		return m.finishConfirm(true), nil
-	case "n", "N":
-		return m.finishConfirm(false), nil
-	}
-	return m, nil
+	return nil
 }
 
-func (m chatModel) finishConfirm(allow bool) chatModel {
+func (m *chatModel) finishConfirm(allow bool) {
 	if m.ask == nil {
-		return m
+		return
 	}
 	select {
 	case m.ask.reply <- allow:
 	default:
 	}
 	m.ask = nil
-	return m
 }
 
 // confirmView replaces the working row while a dangerous command is waiting.
 // Esc denies that command. It does not interrupt the turn.
-func (m chatModel) confirmView() string {
+func (m *chatModel) confirmView() string {
 	if m.ask == nil {
 		return ""
 	}

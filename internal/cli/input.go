@@ -22,13 +22,6 @@ const (
 	composerPadRows = 2
 	// footerBandRows is the status bar plus the blank line above it.
 	footerBandRows = 2
-	// chromeGapRows is the blank line between the transcript and this band.
-	chromeGapRows = 1
-	// confirmBandRows is the four-line confirm panel plus the blank under it.
-	confirmBandRows = 5
-	// workingBandRows is the working row plus the blank under it.
-	workingBandRows = 2
-	menuRows        = 1
 	// endCaretSlack keeps a caret at the end of a full line from wrapping.
 	endCaretSlack = 1
 )
@@ -102,16 +95,14 @@ func (c composer) text() string { return string(c.runes) }
 
 // inputBlock draws the gray composer. x and y are the caret cell inside this
 // block: y counts from the top of the block, x is the display column.
-func (m chatModel) inputBlock() (view string, x, y int) {
+func (m *chatModel) inputBlock() (view string, x, y int) {
 	width := m.width
 	gap := ansi.StringWidth(inputPrompt)
-	inner := width - gap
+	inner := max(width-gap, 1)
 	if m.comp.caret == len(m.comp.runes) && inner > endCaretSlack {
 		inner -= endCaretSlack
 	}
-	if inner < 1 {
-		inner = 1
-	}
+	inner = max(inner, 1)
 	rows, caretLine, caretCol := wrapRunes(m.comp.runes, m.comp.caret, inner)
 	if len(rows) == 0 {
 		rows = [][]rune{{}}
@@ -128,11 +119,11 @@ func (m chatModel) inputBlock() (view string, x, y int) {
 	}
 	start := windowStart(len(rows), slots, caretLine)
 	var b strings.Builder
-	y = 0
+	padTop := 0
 	if pad {
 		b.WriteString(paintBar("", width))
 		b.WriteByte('\n')
-		y = 1
+		padTop = 1
 	}
 	for i := start; i < len(rows) && i < start+slots; i++ {
 		if i > start {
@@ -147,75 +138,32 @@ func (m chatModel) inputBlock() (view string, x, y int) {
 		} else {
 			b.WriteString(paintBar(prefix+string(rows[i]), width))
 		}
-		if i == caretLine {
-			y = 0
-			if pad {
-				y = 1
-			}
-			y += i - start
-			x = caretColumn(prefix, rows[i], caretCol)
-		}
 	}
 	if pad {
 		b.WriteByte('\n')
 		b.WriteString(paintBar("", width))
 	}
-	if x >= width {
-		x = width - 1
+	prefix := strings.Repeat(" ", gap)
+	if caretLine == 0 {
+		prefix = inputPrompt
 	}
-	if x < 0 {
-		x = 0
-	}
+	line := rows[min(caretLine, len(rows)-1)]
+	x = min(max(caretColumn(prefix, line, caretCol), 0), max(width-1, 0))
+	y = max(padTop+caretLine-start, 0)
 	return b.String(), x, y
 }
 
 // barRows is the composer height, including the blank lines above and below.
-func (m chatModel) barRows(content int) int {
-	want := content + composerPadRows
-	if want < minInputRows {
-		want = minInputRows
-	}
-	max := m.inputRows()
-	if want > max {
-		want = max
-	}
-	if want < 1 {
-		return 1
-	}
-	return want
+func (m *chatModel) barRows(content int) int {
+	want := max(content+composerPadRows, minInputRows)
+	return min(want, m.inputRows())
 }
 
-func (m chatModel) inputRows() int {
-	room := m.height - footerBandRows
-	if room < 1 {
-		return 1
-	}
-	room = reserveRows(room, chromeGapRows)
-	switch {
-	case m.ask != nil:
-		room = reserveRows(room, confirmBandRows)
-	case m.busy:
-		room = reserveRows(room, workingBandRows)
-	}
-	if m.menuOpen() {
-		room = reserveRows(room, menuRows)
-	}
-	if maxRows := maxContentLines + composerPadRows; room > maxRows {
-		return maxRows
-	}
-	return room
-}
-
-// reserveRows gives back rows to the chrome above the composer, and
-// always leaves the composer at least one row.
-func reserveRows(room, n int) int {
-	for range n {
-		if room <= 1 {
-			return room
-		}
-		room--
-	}
-	return room
+// inputRows is the tallest the composer may be. The chrome above it is
+// measured, so a slash menu of up to suggestWindow lines is already counted.
+func (m *chatModel) inputRows() int {
+	room := m.height - stackHeight(m.chromeAbove()) - footerBandRows
+	return min(max(room, 1), maxContentLines+composerPadRows)
 }
 
 // windowStart is the first wrapped row still visible, keeping the caret row on screen.
@@ -223,10 +171,7 @@ func windowStart(n, slots, caret int) int {
 	if slots < 1 || n <= slots {
 		return 0
 	}
-	start := caret - slots + 1
-	if start < 0 {
-		start = 0
-	}
+	start := max(caret-slots+1, 0)
 	if start+slots > n {
 		return n - slots
 	}
@@ -234,9 +179,7 @@ func windowStart(n, slots, caret int) int {
 }
 
 func caretColumn(prefix string, line []rune, col int) int {
-	if col > len(line) {
-		col = len(line)
-	}
+	col = min(col, len(line))
 	return ansi.StringWidth(prefix + string(line[:col]))
 }
 
@@ -258,9 +201,6 @@ func paintPlaceholder(width int) string {
 		return paintBar(inputPrompt, width)
 	}
 	hint := ansi.Truncate(askPlaceholder, room, "…")
-	pad := room - ansi.StringWidth(hint)
-	if pad < 0 {
-		pad = 0
-	}
+	pad := max(room-ansi.StringWidth(hint), 0)
 	return barStyle.Render(inputPrompt) + placeholderStyle.Render(hint+strings.Repeat(" ", pad))
 }

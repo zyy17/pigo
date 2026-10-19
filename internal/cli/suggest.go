@@ -14,20 +14,10 @@ import (
 	"github.com/zyy17/pigo/internal/skills"
 )
 
-// slashCommand is one row in the "/" menu. Add a command here, or a skill
-// shows up on its own through slashCommands.
-type slashCommand struct {
-	Name string
-	Desc string
-}
-
 const suggestWindow = 5
 
 func slashCommands(list []skills.Skill) []slashCommand {
-	cmds := []slashCommand{
-		{Name: "/reset", Desc: "clear the transcript"},
-		{Name: "/exit", Desc: "quit"},
-	}
+	cmds := append([]slashCommand(nil), builtins...)
 	for _, skill := range list {
 		desc := oneLine(skill.Description)
 		if desc == "" {
@@ -63,15 +53,15 @@ func partialCommand(query string, matches []slashCommand) bool {
 	return true
 }
 
-func (m chatModel) commandList() []slashCommand {
+func (m *chatModel) commandList() []slashCommand {
 	return slashCommands(m.skills)
 }
 
-func (m chatModel) matches() []slashCommand {
+func (m *chatModel) matches() []slashCommand {
 	return filterCommands(m.commandList(), m.comp.text())
 }
 
-func (m chatModel) menuOpen() bool {
+func (m *chatModel) menuOpen() bool {
 	if m.suggestDismissed || m.busy {
 		return false
 	}
@@ -110,7 +100,7 @@ func (m *chatModel) completeSuggest() {
 	m.suggestAt = 0
 }
 
-func (m chatModel) suggestView() string {
+func (m *chatModel) suggestView() string {
 	if !m.menuOpen() {
 		return ""
 	}

@@ -138,7 +138,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 	m.addBlock(kindAssistant, text.String())
 	m.comp.insert("我们")
 	followed := m.View()
-	m = m.scrollRows(-m.pageRows())
+	m.scrollRows(-m.pageRows())
 	scrolled := m.View()
 	if scrolled.Cursor.X != followed.Cursor.X || scrolled.Cursor.Y != followed.Cursor.Y {
 		t.Fatalf("scroll moved the caret from %d,%d to %d,%d", followed.Cursor.X, followed.Cursor.Y, scrolled.Cursor.X, scrolled.Cursor.Y)
@@ -207,13 +207,15 @@ func displayPrefix(line string, width int) string {
 }
 
 func TestStyledFooterMatchesPlainWidth(t *testing.T) {
-	plain := composeFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
 	styled := styleFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
-	if ansi.Strip(styled) != plain {
-		t.Fatalf("styled footer text changed:\nplain  %s\nstyled %s", plain, ansi.Strip(styled))
-	}
+	plain := ansi.Strip(styled)
 	if ansi.StringWidth(styled) != ansi.StringWidth(plain) || ansi.StringWidth(styled) > 80 {
 		t.Fatalf("styled width %d plain %d", ansi.StringWidth(styled), ansi.StringWidth(plain))
+	}
+	for _, want := range []string{"glm-5.3", "esc to interrupt", "/exit"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("footer missing %q: %s", want, plain)
+		}
 	}
 	if styleFooter("ready", "m", "/tmp", 80) == styleFooter("error", "m", "/tmp", 80) {
 		t.Fatal("ready and error share one color")

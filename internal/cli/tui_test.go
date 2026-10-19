@@ -92,7 +92,7 @@ func TestChatLayout(t *testing.T) {
 }
 
 func TestFooterFitsNarrowAndWide(t *testing.T) {
-	short := composeFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
+	short := ansi.Strip(styleFooter("ready", "glm-5.3", "/tmp/pigo-live", 80))
 	if ansi.StringWidth(short) > 80 {
 		t.Fatalf("short footer is %d cols: %s", ansi.StringWidth(short), short)
 	}
@@ -102,7 +102,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 		}
 	}
 
-	long := composeFooter("working", strings.Repeat("m", 40), strings.Repeat("x", 80), 80)
+	long := ansi.Strip(styleFooter("working", strings.Repeat("m", 40), strings.Repeat("x", 80), 80))
 	if ansi.StringWidth(long) > 80 {
 		t.Fatalf("long footer is %d cols: %s", ansi.StringWidth(long), long)
 	}
@@ -291,8 +291,7 @@ func TestChatRunsAWrite(t *testing.T) {
 	session.Subscribe(func(ev agent.Event) { events <- ev })
 	m := newChat(session)
 	m.resize(80, 24)
-	model, cmd := m.submit("write hello.txt")
-	m = model.(chatModel)
+	cmd := m.submit("write hello.txt")
 	m = runCmds(t, m, cmd, events)
 
 	body, err := os.ReadFile(filepath.Join(dir, "hello.txt"))

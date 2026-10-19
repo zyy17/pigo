@@ -115,7 +115,8 @@ func (m chatModel) Init() tea.Cmd { return nil }
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		return m, m.resize(msg.Width, msg.Height)
+		m.resize(msg.Width, msg.Height)
+		return m, nil
 	case spinner.TickMsg:
 		if !m.busy {
 			return m, nil
@@ -130,25 +131,26 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ask = msg.req
 		return m, nil
 	case tea.PasteMsg:
-		return m.onPaste(msg.Content)
+		m.onPaste(msg.Content)
+		return m, nil
 	case tea.MouseWheelMsg:
-		return m.onWheel(msg)
+		m.onWheel(msg)
+		return m, nil
 	case tea.KeyPressMsg:
-		return m.onKey(msg)
+		return m, m.onKey(msg)
 	}
 	return m, nil
 }
 
-func (m chatModel) onPaste(text string) (tea.Model, tea.Cmd) {
+func (m *chatModel) onPaste(text string) {
 	if m.busy || m.ask != nil || text == "" {
-		return m, nil
+		return
 	}
 	m.comp.insert(text)
 	m.noteTyped()
-	return m, nil
 }
 
-func (m *chatModel) resize(width, height int) tea.Cmd {
+func (m *chatModel) resize(width, height int) {
 	// One clamp. Views read m.width and m.height and do not re-check.
 	m.width = max(width, 1)
 	m.height = max(height, 1)
@@ -158,38 +160,37 @@ func (m *chatModel) resize(width, height int) tea.Cmd {
 	if m.scroll >= 0 {
 		m.scroll = m.viewTop(len(m.historyLines()), m.transcriptRows())
 	}
-	return nil
 }
 
-func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
+func (m *chatModel) submit(text string) tea.Cmd {
 	switch sessionCommand(text) {
 	case cmdEmpty:
-		return m, nil
+		return nil
 	case cmdQuit:
 		m.quitting = true
-		return m, tea.Quit
+		return tea.Quit
 	case cmdReset:
 		m.session.Reset()
 		m.live = ""
 		m.comp.clear()
 		m.addBlock(kindInfo, "— transcript cleared —")
-		return m, nil
+		return nil
 	}
 	expanded, err := commandText(m.session, text)
 	if err != nil {
 		m.comp.clear()
 		m.addBlock(kindError, err.Error())
-		return m, nil
+		return nil
 	}
 	m.busy = true
 	m.started = time.Now()
 	m.live = ""
 	m.comp.clear()
 	m.addBlock(kindUser, text)
-	return m, tea.Batch(m.runPrompt(expanded), m.spin.Tick)
+	return tea.Batch(m.runPrompt(expanded), m.spin.Tick)
 }
 
-func (m chatModel) runPrompt(text string) tea.Cmd {
+func (m *chatModel) runPrompt(text string) tea.Cmd {
 	return func() tea.Msg {
 		_ = m.session.Prompt(context.Background(), text)
 		return nil
@@ -207,7 +208,7 @@ func (m *chatModel) apply(ev agent.Event) {
 		m.finishMessage(ev.Message)
 	case agent.ToolStart:
 		m.flushLive()
-		m.addBlock(kindRan, ranTitle(ev.ToolName, ev.Args))
+		m.addBlock(kindRan, coding.RanTitle(ev.ToolName, ev.Args))
 	case agent.ToolEnd:
 		m.addBlock(kindTool, toolPreview(ev.Result))
 	case agent.AgentEnd:
