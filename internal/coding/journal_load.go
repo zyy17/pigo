@@ -41,7 +41,8 @@ func loadJournal(root, cwd, path string) (*journal, []ai.Message, error) {
 	if err != nil {
 		started = time.Now().UTC()
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	// Read-write: the next append may have to read and cut a torn tail.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -81,7 +82,9 @@ func readEntries(path string) (sessionHeader, []sessionEntry, error) {
 		return sessionHeader{}, nil, fmt.Errorf("session %s is empty", path)
 	}
 	// A crash can tear the last line. Drop that fragment and keep the
-	// complete lines. A bad line in the middle is a corrupt file.
+	// complete lines. The next append cuts the same fragment out of the
+	// file so a new line is not glued onto it. A bad line in the middle
+	// is a corrupt file.
 	if !json.Valid(lines[len(lines)-1].text) && !bytes.HasSuffix(data, []byte("\n")) {
 		lines = lines[:len(lines)-1]
 		if len(lines) == 0 {

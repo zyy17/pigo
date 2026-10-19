@@ -258,7 +258,9 @@ func (j *journal) create(entry sessionEntry) error {
 		return err
 	}
 	path := filepath.Join(sessionBucket(j.dir, j.cwd), j.fileName())
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	// Append, and read-write: a later line may have to read and cut a torn
+	// tail. O_APPEND keeps that write at the new end after the cut.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
@@ -303,10 +305,64 @@ func (j *journal) writeLine(v any) error {
 	if err != nil {
 		return err
 	}
-	if _, err := j.file.Write(append(b, '\n')); err != nil {
+	prefix, err := j.repairTail()
+	if err != nil {
+		return err
+	}
+	line := make([]byte, 0, len(prefix)+len(b)+1)
+	line = append(line, prefix...)
+	line = append(line, b...)
+	line = append(line, '\n')
+	if _, err := j.file.Write(line); err != nil {
 		return err
 	}
 	return j.file.Sync()
+}
+
+// repairTail prepares the file so the next write starts a line of its own.
+// An unfinished fragment is cut back to the previous newline. A finished
+// JSON value that is only missing its newline stays, and the prefix is that
+// newline. A file that already ends on a newline needs nothing.
+func (j *journal) repairTail() ([]byte, error) {
+	info, err := j.file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := info.Size()
+	if size == 0 {
+		return nil, nil
+	}
+	last := make([]byte, 1)
+	if _, err := j.file.ReadAt(last, size-1); err != nil {
+		return nil, err
+	}
+	if last[0] == '\n' {
+		return nil, nil
+	}
+	data := make([]byte, size)
+	if _, err := j.file.ReadAt(data, 0); err != nil {
+		return nil, err
+	}
+	nl := bytes.LastIndexByte(data, '\n')
+	var frag []byte
+	if nl >= 0 {
+		frag = data[nl+1:]
+	} else {
+		frag = data
+	}
+	if json.Valid(bytes.TrimSpace(frag)) {
+		return []byte{'\n'}, nil
+	}
+	if nl < 0 {
+		return nil, errors.New("session file has no complete line")
+	}
+	if err := j.file.Truncate(int64(nl + 1)); err != nil {
+		return nil, err
+	}
+	if err := j.file.Sync(); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func newestSession(dir string) (string, error) {

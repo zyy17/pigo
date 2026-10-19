@@ -185,6 +185,156 @@ func TestLeafWalkSkipsSideBranchAndUnknownEntries(t *testing.T) {
 	}
 }
 
+func TestAppendAfterTornTailRemainsReadable(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	script := &scripted{msgs: []ai.Message{ai.Assistant("kept", ai.StopStop)}}
+	session := openPersisted(t, dir, sessions, "", script)
+	if err := session.Prompt(context.Background(), "remember-apple"); err != nil {
+		t.Fatal(err)
+	}
+	path := session.SessionFile()
+	session.closeJournal()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(string(body), "\n") {
+		t.Fatalf("session file did not end with a newline:\n%s", body)
+	}
+	// A short write can leave a partial object and no newline. Load skips it.
+	// The next append must not glue a new object onto that fragment.
+	torn := string(body) + `{"type":"message","id":"torn"`
+	if err := os.WriteFile(path, []byte(torn), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	next := &scripted{msgs: []ai.Message{ai.Assistant("after", ai.StopStop)}}
+	resumed := openPersisted(t, dir, sessions, path, next)
+	if !containsText(resumed.Messages(), "remember-apple") || containsText(resumed.Messages(), `"id":"torn"`) {
+		t.Fatalf("load %s", roleTexts(resumed.Messages()))
+	}
+	if err := resumed.Prompt(context.Background(), "remember-pear"); err != nil {
+		t.Fatal(err)
+	}
+	resumed.closeJournal()
+
+	again := openPersisted(t, dir, sessions, path, &scripted{})
+	if !containsText(again.Messages(), "remember-apple") || !containsText(again.Messages(), "remember-pear") || !containsText(again.Messages(), "after") {
+		t.Fatalf("after append %s", roleTexts(again.Messages()))
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"id":"torn"`) {
+		t.Fatalf("torn fragment stayed:\n%s", raw)
+	}
+	assertOneJSONValuePerLine(t, raw)
+}
+
+func TestLiveAppendCutsATornTailOnTheOpenFile(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	script := &scripted{msgs: []ai.Message{
+		ai.Assistant("kept", ai.StopStop),
+		ai.Assistant("after", ai.StopStop),
+	}}
+	session := openPersisted(t, dir, sessions, "", script)
+	if err := session.Prompt(context.Background(), "remember-apple"); err != nil {
+		t.Fatal(err)
+	}
+	path := session.SessionFile()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The session still holds the file. A short write would leave this shape
+	// on that same descriptor; the next append has to cut it first.
+	if err := os.WriteFile(path, append(body, []byte(`{"type":"message","id":"torn"`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "remember-pear"); err != nil {
+		t.Fatal(err)
+	}
+	session.closeJournal()
+
+	again := openPersisted(t, dir, sessions, path, &scripted{})
+	if !containsText(again.Messages(), "remember-apple") || !containsText(again.Messages(), "remember-pear") || !containsText(again.Messages(), "after") {
+		t.Fatalf("live append %s", roleTexts(again.Messages()))
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"id":"torn"`) {
+		t.Fatalf("torn fragment stayed:\n%s", raw)
+	}
+	assertOneJSONValuePerLine(t, raw)
+}
+
+func TestAppendAfterMissingNewlineKeepsTheLastLine(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	script := &scripted{msgs: []ai.Message{ai.Assistant("kept", ai.StopStop)}}
+	session := openPersisted(t, dir, sessions, "", script)
+	if err := session.Prompt(context.Background(), "remember-apple"); err != nil {
+		t.Fatal(err)
+	}
+	path := session.SessionFile()
+	session.closeJournal()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The object is complete. Only the trailing newline was lost.
+	cut := strings.TrimSuffix(string(body), "\n")
+	if strings.HasSuffix(cut, "\n") || cut == string(body) {
+		t.Fatalf("expected one trailing newline:\n%s", body)
+	}
+	if err := os.WriteFile(path, []byte(cut), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	next := &scripted{msgs: []ai.Message{ai.Assistant("after", ai.StopStop)}}
+	resumed := openPersisted(t, dir, sessions, path, next)
+	if !containsText(resumed.Messages(), "remember-apple") || !containsText(resumed.Messages(), "kept") {
+		t.Fatalf("load dropped the finished line %s", roleTexts(resumed.Messages()))
+	}
+	if err := resumed.Prompt(context.Background(), "remember-pear"); err != nil {
+		t.Fatal(err)
+	}
+	resumed.closeJournal()
+
+	again := openPersisted(t, dir, sessions, path, &scripted{})
+	if !containsText(again.Messages(), "remember-apple") || !containsText(again.Messages(), "kept") || !containsText(again.Messages(), "remember-pear") {
+		t.Fatalf("after append %s", roleTexts(again.Messages()))
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOneJSONValuePerLine(t, raw)
+}
+
+func assertOneJSONValuePerLine(t *testing.T, raw []byte) {
+	t.Helper()
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		dec := json.NewDecoder(strings.NewReader(line))
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			t.Fatalf("line: %v\n%s", err, line)
+		}
+		if dec.More() {
+			t.Fatalf("glued line %s", line)
+		}
+	}
+}
+
 func TestLegacyLinearFileAndTornTail(t *testing.T) {
 	dir := t.TempDir()
 	sessions := t.TempDir()
