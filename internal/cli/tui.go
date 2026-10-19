@@ -36,16 +36,22 @@ type chatModel struct {
 	quitting         bool
 	ask              *confirmReq
 	suggestDismissed bool
-	started          time.Time
-	cur              *frameCursor
+	// follow pins the transcript to its latest line. top is the first
+	// visible line while the user is reading older history.
+	follow  bool
+	top     int
+	started time.Time
+	cur     *frameCursor
 }
 
 type streamMsg struct {
 	event agent.Event
 }
 
-// runTUI uses the normal screen. Finished lines go to the terminal scrollback.
-// View redraws only the streaming reply, the input, and the footer.
+// runTUI draws the chat on the alternate screen, the way Codex does.
+// Quitting leaves that screen, which restores the shell buffer from
+// before pigo started. Nothing is printed afterwards: there is no
+// session id and no token total to report.
 func runTUI(session *coding.Session) error {
 	events := make(chan agent.Event, 256)
 	session.Subscribe(func(ev agent.Event) {
@@ -77,6 +83,8 @@ func runTUI(session *coding.Session) error {
 		model,
 		tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}),
 		tea.WithFilter(rewriteKeys),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 	_, err := program.Run()
 	return err
@@ -88,6 +96,7 @@ func newChat(session *coding.Session, events chan agent.Event) chatModel {
 		spin:    spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(statusWorkStyle)),
 		events:  events,
 		status:  "ready",
+		follow:  true,
 	}
 	if session != nil {
 		m.modelName = session.Model()
@@ -124,22 +133,34 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case confirmMsg:
 		m.ask = msg.req
 		return m, nil
+	case tea.MouseMsg:
+		return m.onWheel(msg)
 	case tea.KeyMsg:
 		return m.onKey(msg)
 	}
 	return m, nil
 }
 
+func (m chatModel) onWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		return m.scrollRows(-1), nil
+	case tea.MouseButtonWheelDown:
+		return m.scrollRows(1), nil
+	default:
+		return m, nil
+	}
+}
+
 func (m *chatModel) resize(width, height int) tea.Cmd {
 	m.width = width
 	m.height = height
-	if !m.ready {
-		m.ready = true
-		return m.printCell(m.opening())
+	m.ready = true
+	// The transcript is wrapped again from its source on the next frame.
+	// A reading position is a line offset, so a width change can drift it.
+	if !m.follow {
+		m.top = m.viewTop(len(m.historyLines()), m.transcriptRows())
 	}
-	// Finished lines are already in the scrollback at the width they were
-	// printed. Reprinting them would duplicate the transcript. The composer,
-	// the streaming reply, and the footer wrap again because they are redrawn.
 	return nil
 }
 
@@ -157,6 +178,20 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	}
+	// Ctrl-D quits when the composer is empty, matching Codex. A running
+	// turn is left to Ctrl-C.
+	if msg.Type == tea.KeyCtrlD && !m.busy && strings.TrimSpace(m.comp.text()) == "" {
+		m.quitting = true
+		return m, tea.Quit
+	}
+	if plainKey(msg) {
+		switch msg.Type {
+		case tea.KeyPgUp:
+			return m.scrollRows(-m.pageRows()), nil
+		case tea.KeyPgDown:
+			return m.scrollRows(m.pageRows()), nil
+		}
+	}
 	if m.ask != nil {
 		return m.answerConfirm(msg)
 	}
@@ -167,7 +202,18 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// Esc returns a paused transcript to the tail. A slash menu owns Esc
+	// first, and a running turn already used it to interrupt.
+	if plainKey(msg) && msg.Type == tea.KeyEsc && !m.menuOpen() && m.canReturn() {
+		m.follow = true
+		m.top = 0
+		return m, nil
+	}
 	return m.onComposer(msg)
+}
+
+func plainKey(msg tea.KeyMsg) bool {
+	return !msg.Alt
 }
 
 func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {
@@ -299,15 +345,5 @@ func (m *chatModel) addBlock(kind blockKind, text string) tea.Cmd {
 		return nil
 	}
 	m.blocks = append(m.blocks, block{kind: kind, text: text})
-	return m.printCell(m.renderBlock(m.blocks[len(m.blocks)-1]))
-}
-
-// printCell writes one scrollback cell and the blank line after it.
-// Every history cell goes through here, so the gap is the same each time.
-func (m chatModel) printCell(cell string) tea.Cmd {
-	cell = strings.TrimRight(cell, "\n")
-	if cell == "" {
-		return nil
-	}
-	return tea.Println(cell + "\n")
+	return nil
 }

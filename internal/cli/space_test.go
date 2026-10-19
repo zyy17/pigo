@@ -151,12 +151,15 @@ func TestWorkingRowBreathingRoom(t *testing.T) {
 
 		body, x, y := m.layout()
 		lines := strings.Split(body, "\n")
-		wi := workingLine(t, lines)
-		if wi != 0 {
-			t.Fatalf("width %d working row at %d, the scrollback gap is the blank above it", width, wi)
+		if len(lines) != 24 {
+			t.Fatalf("width %d frame is %d lines", width, len(lines))
 		}
+		wi := workingLine(t, lines)
 		if lines[wi+1] != "" {
 			t.Fatalf("width %d missing the blank under the working row: %q", width, lines[wi+1])
+		}
+		if wi+1 >= len(lines)-2 {
+			t.Fatalf("width %d working row is not above the composer", width)
 		}
 		assertCaret(t, lines, x, y, body)
 
@@ -164,12 +167,14 @@ func TestWorkingRowBreathingRoom(t *testing.T) {
 		body, x, y = m.layout()
 		lines = strings.Split(body, "\n")
 		plain := ansi.Strip(body)
-		if strings.Contains(plain, "\n\n\n") {
-			t.Fatalf("width %d doubled blank while streaming:\n%s", width, plain)
+		if strings.Contains(ansi.Strip(strings.Join(m.historyLines(), "\n")), "\n\n\n") {
+			t.Fatalf("width %d doubled a blank inside the transcript:\n%s", width, plain)
 		}
 		wi = workingLine(t, lines)
-		if wi < 2 || lines[wi-1] != "" || strings.TrimSpace(ansi.Strip(lines[wi-2])) == "" {
-			t.Fatalf("width %d streaming gap around row %d:\n%s", width, wi, plain)
+		liveAt := strings.Index(plain, "streaming reply")
+		workAt := strings.Index(plain, "Working")
+		if liveAt < 0 || workAt < 0 || liveAt > workAt {
+			t.Fatalf("width %d live text is not above the working row:\n%s", width, plain)
 		}
 		if lines[wi+1] != "" {
 			t.Fatalf("width %d missing the blank under the working row while streaming", width)

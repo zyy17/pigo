@@ -64,8 +64,8 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	if !m.busy || !strings.Contains(ansi.Strip(m.View()), "Working") {
 		t.Fatalf("working view:\n%s", ansi.Strip(m.View()))
 	}
-	if strings.Contains(ansi.Strip(m.View()), "please write hello.txt") {
-		t.Fatal("submitted text stayed in the composer")
+	if !strings.Contains(ansi.Strip(m.View()), "please write hello.txt") || !strings.Contains(ansi.Strip(m.View()), askPlaceholder) {
+		t.Fatal("submitted line is not in the transcript above a cleared composer")
 	}
 	m = runCmds(t, m, cmd)
 	if m.busy || m.status != "ready" {
@@ -74,22 +74,26 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	plain := ansi.Strip(m.transcript())
 	for _, want := range []string{"please write hello.txt", "Ran write_file", "saved", "> "} {
 		if !strings.Contains(plain, want) {
-			t.Fatalf("scrollback missing %q:\n%s", want, plain)
+			t.Fatalf("transcript missing %q:\n%s", want, plain)
 		}
 	}
 	if strings.Contains(plain, "\n\n\n") {
-		t.Fatalf("scrollback doubled a blank line:\n%s", plain)
+		t.Fatalf("transcript doubled a blank line:\n%s", plain)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	if err != nil || string(body) != "hi\n" {
 		t.Fatalf("hello.txt %q err %v", body, err)
 	}
-	footer := ansi.Strip(m.View())
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	footer := lines[len(lines)-1]
 	if !strings.Contains(footer, "ready") || strings.Contains(footer, "saved") {
 		t.Fatalf("footer after the turn:\n%s", footer)
 	}
+	if !strings.Contains(ansi.Strip(m.View()), "saved") {
+		t.Fatal("finished reply left the frame")
+	}
 	_, x, y := m.layout()
-	lines := strings.Split(m.View(), "\n")
+	lines = strings.Split(m.View(), "\n")
 	if x != 2 || !strings.Contains(ansi.Strip(lines[y]), askPlaceholder) {
 		t.Fatalf("caret x=%d y=%d", x, y)
 	}
@@ -100,7 +104,7 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/sk")})
 	m = next.(chatModel)
 	menu := ansi.Strip(m.View())
-	if !strings.Contains(menu, "/skill:greet") || !strings.Contains(menu, "Write a greeting") || strings.Contains(menu, "/reset") {
+	if !strings.Contains(menu, "/skill:greet") || !strings.Contains(menu, "Write a greeting") || strings.Contains(menu, "clear the transcript") {
 		t.Fatalf("slash menu:\n%s", menu)
 	}
 	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})

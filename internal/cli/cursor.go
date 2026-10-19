@@ -39,7 +39,7 @@ func (f *frameCursor) get() (x, up int, show bool) {
 
 // placingWriter lets Bubble Tea draw a frame, then moves the real cursor
 // onto the caret. The next frame starts by returning the cursor to the last
-// line, which is where the inline renderer expects it.
+// line, which is where the renderer expects it.
 // file, when set, keeps the writer a terminal so window size and raw mode work.
 type placingWriter struct {
 	out  io.Writer
