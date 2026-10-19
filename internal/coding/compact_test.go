@@ -521,12 +521,13 @@ func blockJournal(t *testing.T, j *journal) func() {
 	if j == nil || j.file == nil {
 		t.Fatal("journal has no file")
 	}
-	full, err := os.OpenFile("/dev/full", os.O_WRONLY, 0)
+	// Read-only, so the next append fails and the session file is left as it was.
+	blocked, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	real := j.file
-	j.file = full
+	j.file = blocked
 	restored := false
 	restore := func() {
 		if restored {
@@ -534,7 +535,7 @@ func blockJournal(t *testing.T, j *journal) func() {
 		}
 		restored = true
 		j.file = real
-		_ = full.Close()
+		_ = blocked.Close()
 	}
 	t.Cleanup(restore)
 	return restore
