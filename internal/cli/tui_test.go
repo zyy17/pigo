@@ -40,7 +40,7 @@ func TestChatLayout(t *testing.T) {
 	}
 	assertWidth(t, got, 80)
 	opened := ansi.Strip(got)
-	for _, want := range []string{"test-model", "enter send", "ctrl-c abort", "/exit", askPlaceholder, ">"} {
+	for _, want := range []string{"test-model", "enter send", "esc to interrupt", "/exit", askPlaceholder, ">"} {
 		if !strings.Contains(opened, want) {
 			t.Fatalf("layout missing %q:\n%s", want, opened)
 		}
@@ -78,7 +78,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 	if ansi.StringWidth(short) > 80 {
 		t.Fatalf("short footer is %d cols: %s", ansi.StringWidth(short), short)
 	}
-	for _, want := range []string{"glm-5.3", "ctrl-c abort", "/exit"} {
+	for _, want := range []string{"glm-5.3", "esc to interrupt", "/exit"} {
 		if !strings.Contains(short, want) {
 			t.Fatalf("short footer missing %q: %s", want, short)
 		}

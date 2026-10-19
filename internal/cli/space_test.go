@@ -31,8 +31,8 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 	m.resize(80, 24)
 	m.addBlock(kindUser, "hello")
 	m.addBlock(kindAssistant, "world")
-	m.addBlock(kindInfo, "Worked for 17s")
-	m.addBlock(kindTool, "• Ran ls")
+	m.addBlock(kindWorked, "Worked for 17s")
+	m.addBlock(kindRan, "• Ran ls")
 	m.addBlock(kindUser, "again")
 
 	got := m.transcript()

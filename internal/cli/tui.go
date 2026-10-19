@@ -26,7 +26,9 @@ type blockKind int
 const (
 	kindUser blockKind = iota
 	kindAssistant
+	kindRan
 	kindTool
+	kindWorked
 	kindInfo
 	kindError
 )
@@ -206,7 +208,7 @@ func (m *chatModel) apply(ev agent.Event) {
 		m.finishMessage(ev.Message)
 	case agent.ToolStart:
 		m.flushLive()
-		m.addBlock(kindTool, ranTitle(ev.ToolName, ev.Args))
+		m.addBlock(kindRan, ranTitle(ev.ToolName, ev.Args))
 	case agent.ToolEnd:
 		m.addBlock(kindTool, toolPreview(ev.Result))
 	case agent.AgentEnd:
@@ -260,7 +262,7 @@ func (m *chatModel) workedFor() {
 	if secs < 1 {
 		return
 	}
-	m.addBlock(kindInfo, "Worked for "+strconv.Itoa(secs)+"s")
+	m.addBlock(kindWorked, "Worked for "+strconv.Itoa(secs)+"s")
 }
 
 func (m *chatModel) addBlock(kind blockKind, text string) {

@@ -23,7 +23,7 @@ func TestConfirmPrompt(t *testing.T) {
 			t.Errorf("view missing %q\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "esc to interrupt") {
+	if strings.Contains(view, "Working") {
 		t.Fatalf("working row still shown:\n%s", view)
 	}
 
