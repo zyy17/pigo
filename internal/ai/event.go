@@ -23,7 +23,6 @@ type Usage struct {
 	Total  int
 }
 
-// Add returns the sum of two usage reports.
 func (u Usage) Add(v Usage) Usage {
 	return Usage{
 		Input:  u.Input + v.Input,

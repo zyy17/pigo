@@ -62,8 +62,7 @@ type chatModel struct {
 	// scroll is the first visible transcript line. Negative follows the tail.
 	scroll  int
 	started time.Time
-	// usageIn and usageOut are the session totals. usageSet is false until
-	// a provider sends a usage object.
+	// usageSet stays false until a provider sends usage, so the footer omits the segment.
 	usageIn  int
 	usageOut int
 	usageSet bool

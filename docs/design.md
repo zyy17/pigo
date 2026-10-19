@@ -46,7 +46,7 @@ OpenAI chat completions use a different shape: tool calls are nested under `func
 
 The system prompt is attached when a request is built. It is not stored in the transcript, so `Reset` can drop messages and leave the prompt, model, and tools in place.
 
-A streaming request sets `stream_options.include_usage`. When a chunk includes `usage`, the accumulator keeps the latest object: `prompt_tokens` or `input_tokens`, `completion_tokens` or `output_tokens`, and `total_tokens` when the provider sent it. Counts from one call are not added together. The assistant `message_end` carries that call and the session sum. The status line shows the session sum the way Codex does (`1.2K in · 340 out`) and leaves the segment out when the provider sends nothing. `-p` and the line session print one line for a call that reported usage. Nothing is written to disk, and there is no price table.
+A streaming request sets `stream_options.include_usage`. When a chunk includes `usage`, the accumulator keeps the latest object: `prompt_tokens` or `input_tokens`, `completion_tokens` or `output_tokens`, and `total_tokens` when the provider sent it. Counts from one call are not added together. Each reported call is added into a session total held in memory, and `Reset` drops that total with the transcript. The status line shows the total the way Codex does (`1.2K in · 340 out`) and leaves the segment out when the provider sends nothing. `-p` and the line session print one line for a call that reported usage. Nothing is written to disk, and there is no price table.
 
 ## The agent loop
 

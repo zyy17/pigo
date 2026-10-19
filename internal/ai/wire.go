@@ -18,7 +18,6 @@ type wireRequest struct {
 }
 
 // wireStreamOptions is the OpenAI stream_options object.
-// include_usage asks for a usage object, usually on the last chunk.
 type wireStreamOptions struct {
 	IncludeUsage bool `json:"include_usage"`
 }
@@ -118,10 +117,11 @@ func encodeRequest(req Request) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(wireRequest{
-		Model:         req.Model,
-		Messages:      messages,
-		Tools:         wireTools(req.Tools),
-		Stream:        true,
+		Model:    req.Model,
+		Messages: messages,
+		Tools:    wireTools(req.Tools),
+		Stream:   true,
+		// Without this flag, compatible providers omit the usage object.
 		StreamOptions: wireStreamOptions{IncludeUsage: true},
 	})
 }

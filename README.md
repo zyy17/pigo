@@ -179,7 +179,7 @@ Created hello.txt.
 120 in · 40 out
 ```
 
-That last line appears only when the provider reports token usage. The chat status line shows the session total in the same words (`1.2K in · 340 out`) and stays blank otherwise. Counts are not saved, and pigo does not price them.
+Each request sets `stream_options.include_usage`. Calls that report usage add up to a session total. The chat status line shows that total as `1.2K in · 340 out` and stays blank when the provider sends none. `-p` prints one line, such as `120 in · 40 out`, only for a call that reported usage. Counts are not saved, and pigo does not price them.
 
 ## Out of scope
 

@@ -14,7 +14,6 @@ type callBuf struct {
 }
 
 // accumulator folds streaming deltas into one assistant message.
-// usage is the latest usage object on this call. Chunks are not added together.
 type accumulator struct {
 	text     strings.Builder
 	calls    []callBuf
@@ -32,7 +31,8 @@ func (a *accumulator) consume(data string, out chan<- Event) error {
 	if chunk.Error != nil && chunk.Error.Message != "" {
 		return errors.New(chunk.Error.Message)
 	}
-	// Usage often arrives on the last chunk, sometimes with an empty choices list.
+	// The final chunk is often a usage object with no choices. Keep the latest
+	// object; a null usage must not wipe it, and chunks in one call are not summed.
 	if u, ok := chunk.Usage.counts(); ok {
 		a.usage = u
 		a.hasUsage = true
