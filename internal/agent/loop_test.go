@@ -197,6 +197,33 @@ func TestStopErrorPairsToolCalls(t *testing.T) {
 	}
 }
 
+func TestCloseCallsStartsTheTool(t *testing.T) {
+	blocked := ai.Assistant("", ai.StopError, ai.ToolCall{
+		ID:        "c1",
+		Name:      "echo",
+		Arguments: []byte(`{"text":"x"}`),
+	})
+	script := &fakeModel{msgs: []ai.Message{blocked}}
+	ag := newAgent(t, script, echoTool())
+	var sawStart bool
+	var result string
+	ag.Subscribe(func(ev agent.Event) {
+		if ev.Type == agent.ToolStart && ev.ToolName == "echo" {
+			sawStart = true
+		}
+		if ev.Type == agent.ToolEnd {
+			result = ev.Result
+		}
+	})
+	err := ag.Prompt(context.Background(), "go")
+	if err == nil || !strings.Contains(err.Error(), "the model returned an error") {
+		t.Fatal(err)
+	}
+	if !sawStart || result != "not executed" {
+		t.Fatalf("start %v result %q", sawStart, result)
+	}
+}
+
 func TestAbortPairsRemainingCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var ran int
