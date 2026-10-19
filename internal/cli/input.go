@@ -1,17 +1,38 @@
+// Composer: the text under the prompt, and the gray bar it is drawn in.
+//
+// The caret cell is returned with the bar so the view can place the
+// hardware cursor there. Wide characters count as two columns.
 package cli
 
 import (
 	"strings"
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
 
-const askPlaceholder = "Ask pigo to do anything"
+const (
+	askPlaceholder = "Ask pigo to do anything"
+	inputPrompt    = "> "
 
-// composer is the text in the input bar. The real terminal cursor is moved
-// onto the caret after each frame so an IME popup opens there.
+	minInputRows    = 3
+	maxContentLines = 8
+	// composerPadRows is the blank line above the prompt and the one below it.
+	composerPadRows = 2
+	// footerBandRows is the status bar plus the blank line above it.
+	footerBandRows = 2
+	// chromeGapRows is the blank line between the transcript and this band.
+	chromeGapRows = 1
+	// confirmBandRows is the four-line confirm panel plus the blank under it.
+	confirmBandRows = 5
+	// workingBandRows is the working row plus the blank under it.
+	workingBandRows = 2
+	menuRows        = 1
+	// endCaretSlack keeps a caret at the end of a full line from wrapping.
+	endCaretSlack = 1
+)
+
+// composer is the text in the input bar. caret is a rune index.
 type composer struct {
 	runes []rune
 	caret int
@@ -78,83 +99,6 @@ func (c *composer) set(s string) {
 
 func (c composer) text() string { return string(c.runes) }
 
-func (m chatModel) onComposer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		if msg.Alt {
-			return m.newline()
-		}
-		return m.onEnter()
-	case tea.KeyTab:
-		if m.menuOpen() {
-			m.completeSuggest()
-		}
-		return m, nil
-	case tea.KeyEsc:
-		m.suggestDismissed = true
-		return m, nil
-	case tea.KeyUp:
-		if m.menuOpen() {
-			m.moveSuggest(-1)
-		}
-		return m, nil
-	case tea.KeyDown:
-		if m.menuOpen() {
-			m.moveSuggest(1)
-		}
-		return m, nil
-	case tea.KeyCtrlJ:
-		return m.newline()
-	case tea.KeyRunes:
-		m.comp.insert(string(msg.Runes))
-		m.noteTyped()
-		return m, nil
-	case tea.KeySpace:
-		m.comp.insert(" ")
-		m.noteTyped()
-		return m, nil
-	case tea.KeyBackspace:
-		m.comp.backspace()
-		m.noteTyped()
-		return m, nil
-	case tea.KeyDelete:
-		m.comp.del()
-		m.noteTyped()
-		return m, nil
-	case tea.KeyLeft, tea.KeyCtrlB:
-		m.comp.left()
-		return m, nil
-	case tea.KeyRight, tea.KeyCtrlF:
-		m.comp.right()
-		return m, nil
-	case tea.KeyHome, tea.KeyCtrlA:
-		m.comp.home()
-		return m, nil
-	case tea.KeyEnd, tea.KeyCtrlE:
-		m.comp.end()
-		return m, nil
-	case tea.KeyCtrlU:
-		m.comp.clear()
-		m.noteTyped()
-		return m, nil
-	case tea.KeyCtrlW:
-		m.comp.wordBack()
-		m.noteTyped()
-		return m, nil
-	default:
-		if msg.String() == "alt+enter" {
-			return m.newline()
-		}
-		return m, nil
-	}
-}
-
-const (
-	inputPrompt     = "> "
-	minInputRows    = 3
-	maxContentLines = 8
-)
-
 // inputBlock draws the gray composer. x and y are the caret cell inside this
 // block: y counts from the top of the block, x is the display column.
 func (m chatModel) inputBlock() (view string, x, y int) {
@@ -164,9 +108,8 @@ func (m chatModel) inputBlock() (view string, x, y int) {
 	}
 	gap := ansi.StringWidth(inputPrompt)
 	inner := width - gap
-	if m.comp.caret == len(m.comp.runes) && inner > 1 {
-		// Leave a cell so a caret at the end does not wrap onto the next row.
-		inner--
+	if m.comp.caret == len(m.comp.runes) && inner > endCaretSlack {
+		inner -= endCaretSlack
 	}
 	if inner < 1 {
 		inner = 1
@@ -230,7 +173,7 @@ func (m chatModel) inputBlock() (view string, x, y int) {
 
 // barRows is the composer height, including the blank lines above and below.
 func (m chatModel) barRows(content int) int {
-	want := content + 2
+	want := content + composerPadRows
 	if want < minInputRows {
 		want = minInputRows
 	}
@@ -245,35 +188,34 @@ func (m chatModel) barRows(content int) int {
 }
 
 func (m chatModel) inputRows() int {
-	room := m.height - 2 // footer and the blank line above it
+	room := m.height - footerBandRows
 	if room < 1 {
 		return 1
 	}
-	if room > 1 {
-		room-- // blank line between the transcript and this chrome
+	room = reserveRows(room, chromeGapRows)
+	switch {
+	case m.ask != nil:
+		room = reserveRows(room, confirmBandRows)
+	case m.busy:
+		room = reserveRows(room, workingBandRows)
 	}
-	if m.ask != nil {
-		// Four confirm lines plus the blank under the panel.
-		for range 5 {
-			if room <= 1 {
-				break
-			}
-			room--
-		}
-	} else {
-		if m.busy && room > 1 {
-			room-- // working row
-		}
-		if m.busy && room > 1 {
-			room-- // blank line under the working row
-		}
+	if m.menuOpen() {
+		room = reserveRows(room, menuRows)
 	}
-	if m.menuOpen() && room > 1 {
-		room--
-	}
-	const maxRows = maxContentLines + 2
-	if room > maxRows {
+	if maxRows := maxContentLines + composerPadRows; room > maxRows {
 		return maxRows
+	}
+	return room
+}
+
+// reserveRows gives back rows to the chrome above the composer, and
+// always leaves the composer at least one row.
+func reserveRows(room, n int) int {
+	for range n {
+		if room <= 1 {
+			return room
+		}
+		room--
 	}
 	return room
 }

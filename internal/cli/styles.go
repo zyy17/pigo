@@ -1,8 +1,8 @@
+// Lipgloss styles for the chat screen. Keep new colors here.
 package cli
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
-// Lipgloss styles for the chat screen. Keep new colors here.
 var (
 	cyanStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8"))
 	coralStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))

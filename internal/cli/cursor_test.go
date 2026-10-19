@@ -1,16 +1,13 @@
 package cli
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestCaretColumnForCJKAndWrap(t *testing.T) {
@@ -51,7 +48,7 @@ func TestCaretColumnForCJKAndWrap(t *testing.T) {
 
 	m.comp.set(strings.Repeat("我们", 40) + " then some english")
 	_, x, y = m.layout()
-	lines = strings.Split(m.View(), "\n")
+	lines = strings.Split(m.View().Content, "\n")
 	row := strings.TrimRight(ansi.Strip(lines[y]), " ")
 	if x != ansi.StringWidth(row) {
 		t.Fatalf("wrapped caret column %d, text width %d: %q", x, ansi.StringWidth(row), row)
@@ -73,33 +70,7 @@ func lipglossHeight(s string) int {
 	return strings.Count(s, "\n") + 1
 }
 
-func TestPlacingWriterParksOnTheCaret(t *testing.T) {
-	cur := &frameCursor{}
-	cur.set(8, 2, true)
-	var buf bytes.Buffer
-	w := &placingWriter{out: &buf, cur: cur}
-	if _, err := w.Write([]byte("hello\nfooter\r")); err != nil {
-		t.Fatal(err)
-	}
-	got := buf.String()
-	if !strings.Contains(got, ansi.CursorUp(2)) || !strings.Contains(got, ansi.CursorForward(8)) {
-		t.Fatalf("cursor not moved onto the caret: %q", got)
-	}
-	if !strings.HasSuffix(got, ansi.ShowCursor) && !strings.Contains(got, ansi.ShowCursor) {
-		t.Fatalf("cursor stayed hidden: %q", got)
-	}
-
-	buf.Reset()
-	if _, err := w.Write([]byte("again\r")); err != nil {
-		t.Fatal(err)
-	}
-	got = buf.String()
-	if !strings.HasPrefix(got, ansi.HideCursor+ansi.CursorDown(2)+"\r") {
-		t.Fatalf("next frame did not restore the cursor: %q", got)
-	}
-}
-
-func TestHardwareCursorTracksTheComposer(t *testing.T) {
+func TestCursorTracksTheComposer(t *testing.T) {
 	m := readyCursorChat()
 	assertCursorPrefix(t, m, "> ")
 
@@ -107,47 +78,37 @@ func TestHardwareCursorTracksTheComposer(t *testing.T) {
 	assertCursorPrefix(t, m, "> 我们额")
 
 	m.comp.set("ab")
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = next.(chatModel)
 	m.comp.insert("我们")
 	assertCursorPrefix(t, m, "  我们")
 
 	m = readyCursorChat()
 	m.comp.set(strings.Repeat("我们", 40) + " tail")
-	body := m.View()
-	x, up, show := m.cur.get()
-	if !show {
-		t.Fatal("cursor hidden")
-	}
-	plain := strings.TrimRight(ansi.Strip(cursorLine(t, body, up)), " ")
-	if ansi.StringWidth(plain) != x || x >= 80 {
-		t.Fatalf("wrapped caret column %d line %q", x, plain)
+	v := m.View()
+	plain := strings.TrimRight(ansi.Strip(cursorLine(t, v.Content, v.Cursor.Y)), " ")
+	if ansi.StringWidth(plain) != v.Cursor.X || v.Cursor.X >= 80 {
+		t.Fatalf("wrapped caret column %d line %q", v.Cursor.X, plain)
 	}
 
 	m.resize(20, 24)
-	body = m.View()
-	x, up, show = m.cur.get()
-	if !show {
-		t.Fatal("cursor hidden after resize")
-	}
-	plain = strings.TrimRight(ansi.Strip(cursorLine(t, body, up)), " ")
-	if ansi.StringWidth(plain) != x || x >= 20 {
-		t.Fatalf("resized caret column %d line %q", x, plain)
+	v = m.View()
+	plain = strings.TrimRight(ansi.Strip(cursorLine(t, v.Content, v.Cursor.Y)), " ")
+	if v.Cursor == nil || ansi.StringWidth(plain) != v.Cursor.X || v.Cursor.X >= 20 {
+		t.Fatalf("resized caret column %d line %q", v.Cursor.X, plain)
 	}
 
 	m = readyCursorChat()
 	m.comp.insert("/")
-	body = m.View()
-	x, up, _ = m.cur.get()
-	if x != 3 || displayPrefix(cursorLine(t, body, up), x) != "> /" {
-		t.Fatalf("slash caret %d %q", x, displayPrefix(cursorLine(t, body, up), x))
+	v = m.View()
+	if v.Cursor.X != 3 || displayPrefix(cursorLine(t, v.Content, v.Cursor.Y), v.Cursor.X) != "> /" {
+		t.Fatalf("slash caret %d %q", v.Cursor.X, displayPrefix(cursorLine(t, v.Content, v.Cursor.Y), v.Cursor.X))
 	}
-	y := strings.Count(body, "\n") - up
 	menu := false
-	for i, line := range strings.Split(body, "\n")[:y] {
+	for i, line := range strings.Split(v.Content, "\n")[:v.Cursor.Y] {
 		if strings.Contains(line, "/reset") && strings.Contains(line, "clear the transcript") {
 			menu = true
-			if i >= y {
+			if i >= v.Cursor.Y {
 				t.Fatal("menu covered the caret")
 			}
 		}
@@ -159,12 +120,11 @@ func TestHardwareCursorTracksTheComposer(t *testing.T) {
 	m = readyCursorChat()
 	m.busy = true
 	m.started = time.Now()
-	body = m.View()
-	_, up, _ = m.cur.get()
-	if got := displayPrefix(cursorLine(t, body, up), 2); got != "> " {
+	v = m.View()
+	if got := displayPrefix(cursorLine(t, v.Content, v.Cursor.Y), 2); got != "> " {
 		t.Fatalf("busy caret %q", got)
 	}
-	if !strings.Contains(ansi.Strip(body), "Working") {
+	if !strings.Contains(ansi.Strip(v.Content), "Working") {
 		t.Fatal("working row missing")
 	}
 
@@ -178,79 +138,16 @@ func TestHardwareCursorTracksTheComposer(t *testing.T) {
 	m.addBlock(kindAssistant, text.String())
 	m.comp.insert("我们")
 	followed := m.View()
-	x0, up0, _ := m.cur.get()
 	m = m.scrollRows(-m.pageRows())
 	scrolled := m.View()
-	x1, up1, _ := m.cur.get()
-	if x1 != x0 || up1 != up0 {
-		t.Fatalf("scroll moved the caret from column %d up %d to column %d up %d", x0, up0, x1, up1)
+	if scrolled.Cursor.X != followed.Cursor.X || scrolled.Cursor.Y != followed.Cursor.Y {
+		t.Fatalf("scroll moved the caret from %d,%d to %d,%d", followed.Cursor.X, followed.Cursor.Y, scrolled.Cursor.X, scrolled.Cursor.Y)
 	}
-	if got := displayPrefix(cursorLine(t, scrolled, up1), x1); got != "> 我们" {
+	if got := displayPrefix(cursorLine(t, scrolled.Content, scrolled.Cursor.Y), scrolled.Cursor.X); got != "> 我们" {
 		t.Fatalf("scrolled caret %q", got)
 	}
-	if ansi.Strip(scrolled) == ansi.Strip(followed) {
+	if ansi.Strip(scrolled.Content) == ansi.Strip(followed.Content) {
 		t.Fatal("scroll did not change the transcript")
-	}
-}
-
-func TestPlacingWriterParksOnAltScreenFrames(t *testing.T) {
-	cur := &frameCursor{}
-	cur.set(8, 3, true)
-	var buf bytes.Buffer
-	w := &placingWriter{out: &buf, cur: cur}
-
-	if _, err := w.Write([]byte("\x1b[H")); err != nil {
-		t.Fatal(err)
-	}
-	if buf.String() != "\x1b[H" {
-		t.Fatalf("bare home was treated as a frame: %q", buf.String())
-	}
-
-	buf.Reset()
-	frame := []byte("one\r\ntwo\r\nthree\r\nfour" + ansi.CursorPosition(0, 4))
-	if _, err := w.Write(frame); err != nil {
-		t.Fatal(err)
-	}
-	got := buf.String()
-	if !strings.HasPrefix(got, "one\r\n") || !strings.Contains(got, ansi.CursorUp(3)) || !strings.Contains(got, ansi.CursorForward(8)) || !strings.HasSuffix(got, ansi.ShowCursor) {
-		t.Fatalf("caret not placed: %q", got)
-	}
-
-	buf.Reset()
-	cur.set(2, 3, true)
-	next := []byte("\x1b[Hredrawn\r\nfooter" + ansi.CursorPosition(0, 2))
-	if _, err := w.Write(next); err != nil {
-		t.Fatal(err)
-	}
-	got = buf.String()
-	if !strings.HasPrefix(got, ansi.HideCursor+"\x1b[H") {
-		t.Fatalf("next frame did not hide before painting: %q", got)
-	}
-	if strings.Contains(got, ansi.CursorDown(3)) {
-		t.Fatalf("alt frame stepped through the bottom-left: %q", got)
-	}
-	if !strings.Contains(got, ansi.CursorForward(2)) || !strings.HasSuffix(got, ansi.ShowCursor) {
-		t.Fatalf("second caret: %q", got)
-	}
-
-	m := readyCursorChat()
-	m.comp.insert("我们额")
-	body := m.View()
-	x, up, show := m.cur.get()
-	if !show {
-		t.Fatal("cursor hidden")
-	}
-	buf.Reset()
-	w.cur = m.cur
-	lines := strings.Split(body, "\n")
-	painted := []byte(strings.Join(lines, "\r\n") + ansi.CursorPosition(0, len(lines)))
-	if _, err := w.Write(painted); err != nil {
-		t.Fatal(err)
-	}
-	got = buf.String()
-	// The previous frame is still parked, so this one hides first.
-	if !strings.Contains(got, ansi.CursorUp(up)) || !strings.Contains(got, ansi.CursorForward(x)) {
-		t.Fatalf("live frame ignored caret column %d up %d: %q", x, up, got)
 	}
 }
 
@@ -259,31 +156,31 @@ func readyCursorChat() chatModel {
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
-	m.cur = &frameCursor{}
 	return m
 }
 
 func assertCursorPrefix(t *testing.T, m chatModel, want string) {
 	t.Helper()
-	body := m.View()
-	x, up, show := m.cur.get()
-	if !show {
+	v := m.View()
+	if v.Cursor == nil {
 		t.Fatal("cursor hidden")
 	}
-	if got := displayPrefix(cursorLine(t, body, up), x); got != want {
-		t.Fatalf("caret prefix %q want %q (column %d, up %d)", got, want, x, up)
+	if !v.AltScreen || v.MouseMode != tea.MouseModeCellMotion {
+		t.Fatal("frame left the alternate screen or dropped the mouse")
 	}
-	lines := strings.Split(body, "\n")
+	if got := displayPrefix(cursorLine(t, v.Content, v.Cursor.Y), v.Cursor.X); got != want {
+		t.Fatalf("caret prefix %q want %q (column %d, row %d)", got, want, v.Cursor.X, v.Cursor.Y)
+	}
+	lines := strings.Split(v.Content, "\n")
 	foot := ansi.Strip(lines[len(lines)-1])
 	if !strings.Contains(foot, "ready") && !strings.Contains(foot, "working") {
 		t.Fatalf("footer left the bottom: %q", foot)
 	}
 }
 
-func cursorLine(t *testing.T, body string, up int) string {
+func cursorLine(t *testing.T, body string, y int) string {
 	t.Helper()
 	lines := strings.Split(body, "\n")
-	y := len(lines) - 1 - up
 	if y < 0 || y >= len(lines) {
 		t.Fatalf("caret row %d of %d", y, len(lines))
 	}
@@ -309,8 +206,6 @@ func displayPrefix(line string, width int) string {
 }
 
 func TestStyledFooterMatchesPlainWidth(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.ColorProfile()) })
 	plain := composeFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
 	styled := styleFooter("ready", "glm-5.3", "/tmp/pigo-live", 80)
 	if ansi.Strip(styled) != plain {

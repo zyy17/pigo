@@ -4,15 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestAssistantProseUsesAccents(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.ColorProfile()) })
-
 	src := strings.Join([]string{
 		"# Title",
 		"use `code` and **bold** and *note*",
@@ -69,9 +64,6 @@ func ansiCodes(s string) string {
 }
 
 func TestToolHeaderIsBoldAndPreviewIsDim(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.ColorProfile()) })
-
 	m := newChat(nil, nil)
 	m.resize(80, 24)
 	head := m.renderBlock(block{kind: kindTool, text: "• Ran ls"})

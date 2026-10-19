@@ -1,9 +1,14 @@
+// Command-guard confirm.
+//
+// A dangerous shell command replaces the working row until the user
+// answers. Enter or y allows it. Esc or n denies it. Esc does not
+// interrupt the turn; Ctrl-C still does, and denies on the way out.
 package cli
 
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -18,21 +23,18 @@ type confirmMsg struct {
 	req *confirmReq
 }
 
-func (m chatModel) answerConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+func (m chatModel) answerConfirm(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
 		return m.finishConfirm(true), nil
-	case tea.KeyEsc:
+	case "esc":
 		return m.finishConfirm(false), nil
-	case tea.KeyRunes:
-		if len(msg.Runes) == 1 {
-			switch msg.Runes[0] {
-			case 'y', 'Y':
-				return m.finishConfirm(true), nil
-			case 'n', 'N':
-				return m.finishConfirm(false), nil
-			}
-		}
+	}
+	switch msg.Text {
+	case "y", "Y":
+		return m.finishConfirm(true), nil
+	case "n", "N":
+		return m.finishConfirm(false), nil
 	}
 	return m, nil
 }

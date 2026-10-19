@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -14,46 +14,31 @@ import (
 	"github.com/zyy17/pigo/internal/coding"
 )
 
-type csiMsg []byte
-
-func TestShiftEnterSequences(t *testing.T) {
-	for _, seq := range []string{"\x1b[27;2;13~", "\x1b[13;2u", "\x1b[13;2;13u", "\x1b[27;6;13~"} {
-		if !isShiftEnter(csiMsg(seq)) {
-			t.Fatalf("shift+enter not recognized: %q", seq)
-		}
-	}
-	for _, seq := range []string{"\x1b[27;3;13~", "\x1b[27;2;65~", "\x1b[13;3u", "\r"} {
-		if isShiftEnter(csiMsg(seq)) {
-			t.Fatalf("not shift+enter: %q", seq)
-		}
-	}
-	if isShiftEnter(tea.KeyMsg{Type: tea.KeyEnter}) {
-		t.Fatal("plain enter looked like shift+enter")
-	}
-	if _, ok := rewriteKeys(nil, csiMsg("\x1b[27;2;13~")).(shiftEnterMsg); !ok {
-		t.Fatal("filter did not rewrite shift+enter")
-	}
-}
-
 func TestNewlineBindings(t *testing.T) {
 	m := newChat(nil, nil)
 	m.resize(80, 24)
 	m.comp.insert("hello")
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = next.(chatModel)
 	if m.comp.text() != "hello\n" || m.busy {
 		t.Fatalf("ctrl+j: %q busy=%v", m.comp.text(), m.busy)
 	}
 
-	next, _ = m.Update(shiftEnterMsg{})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
 	m = next.(chatModel)
 	if m.comp.text() != "hello\n\n" {
 		t.Fatalf("shift+enter: %q", m.comp.text())
 	}
 
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	m = next.(chatModel)
+	if m.comp.text() != "hello\n\n\n" || m.busy {
+		t.Fatalf("alt+enter: %q busy=%v", m.comp.text(), m.busy)
+	}
+
 	m.comp.set(`line\`)
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if m.comp.text() != "line\n" || m.busy {
 		t.Fatalf("backslash enter: %q busy=%v", m.comp.text(), m.busy)
@@ -78,7 +63,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 	m.resize(80, 24)
 	m.comp.insert("hello there")
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if m.comp.text() != "" {
 		t.Fatalf("composer not cleared: %q", m.comp.text())
@@ -86,7 +71,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 	if !strings.Contains(m.transcript(), "> hello there") {
 		t.Fatal("user line was not committed")
 	}
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "> hello there") || !strings.Contains(view, askPlaceholder) {
 		t.Fatal("committed line is not in the transcript above a cleared composer")
 	}
@@ -95,7 +80,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 			t.Fatalf("working row missing %q:\n%s", want, view)
 		}
 	}
-	if lipglossHeight(m.View()) > 24 {
+	if lipglossHeight(m.View().Content) > 24 {
 		t.Fatal("working frame is taller than the terminal")
 	}
 
@@ -108,7 +93,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("prompt did not start")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	select {
 	case finished := <-done:
 		if finished.busy {
