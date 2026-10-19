@@ -28,9 +28,6 @@ const (
 func (m chatModel) View() tea.View {
 	body, x, y := m.layout()
 	v := tea.NewView(body)
-	// Keep the alternate screen on the quit frame too. Shutdown then
-	// leaves that screen. An empty main-screen frame would erase the
-	// shell lines below the cursor instead of restoring them.
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	placeCursor(&v, x, y, m.ready && !m.quitting && body != "")
@@ -240,11 +237,12 @@ func toolPreview(result string) string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
+		line := afterCarriage(lines[i])
 		if i == 0 {
-			b.WriteString("└ " + lines[i])
+			b.WriteString("└ " + line)
 			continue
 		}
-		b.WriteString("  " + lines[i])
+		b.WriteString("  " + line)
 	}
 	if extra := len(lines) - n; extra > 0 {
 		b.WriteString("\n  + ")
@@ -252,6 +250,15 @@ func toolPreview(result string) string {
 		b.WriteString(" lines")
 	}
 	return b.String()
+}
+
+// Progress output rewrites a line with \r. The text after the last one
+// is what should stay, or it paints over the └ prefix.
+func afterCarriage(line string) string {
+	if cut := strings.LastIndexByte(line, '\r'); cut >= 0 {
+		return line[cut+1:]
+	}
+	return line
 }
 
 func oneLine(s string) string {
