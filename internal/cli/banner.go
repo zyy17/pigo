@@ -14,7 +14,6 @@ const (
 	// plus the session card without crowding the composer.
 	wordmarkMinHeight = 22
 	cardMinWidth      = 12
-	cardFallbackWidth = 80
 )
 
 // mark is the pigo wordmark. Columns are p, i, g, o. Four rows, strokes
@@ -77,19 +76,12 @@ func wordmarkCols() int {
 
 func (m chatModel) hintLine() string {
 	hint := "/skill:name loads a skill. /reset clears the chat. /exit quits."
-	width := m.width
-	if width > 0 {
-		hint = wrapText(hint, width)
-	}
-	return dimStyle.Render(hint)
+	return dimStyle.Render(wrapText(hint, m.width))
 }
 
 // sessionCard is the bordered session line: version, model, and directory.
 func (m chatModel) sessionCard() string {
 	width := m.width
-	if width < 1 {
-		width = cardFallbackWidth
-	}
 	title := "pigo " + version
 	meta := sessionMeta(m.modelName, m.root)
 	if width < cardMinWidth {

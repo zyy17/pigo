@@ -38,7 +38,7 @@ func (m chatModel) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.busy {
 		// Esc stops the turn. The working row is the hint for that key.
 		// A confirm prompt owns Esc first and uses it to deny.
-		if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) && m.session != nil {
+		if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) {
 			m.session.Abort()
 		}
 		return m, nil
@@ -57,9 +57,7 @@ func (m chatModel) onInterrupt() (tea.Model, tea.Cmd) {
 		m = m.finishConfirm(false)
 	}
 	if m.busy {
-		if m.session != nil {
-			m.session.Abort()
-		}
+		m.session.Abort()
 		return m, nil
 	}
 	m.quitting = true

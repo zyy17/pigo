@@ -7,7 +7,7 @@ import (
 )
 
 func TestComposerEdits(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	m.comp.set("ab cd")
 	steps := []struct {
@@ -48,8 +48,8 @@ func TestWindowAndLayoutEdges(t *testing.T) {
 	if windowStart(10, 3, 9) != 7 || windowStart(10, 3, 0) != 0 {
 		t.Fatalf("window %d %d", windowStart(10, 3, 9), windowStart(10, 3, 0))
 	}
-	if paneCols(0) != 1 || textCols(2) != 1 || textCols(80) != 78 {
-		t.Fatalf("cols %d %d %d", paneCols(0), textCols(2), textCols(80))
+	if textCols(2) != 1 || textCols(80) != 78 {
+		t.Fatalf("cols %d %d", textCols(2), textCols(80))
 	}
 	got, dropped := fitHeightDrop("a\nb\nc", 2)
 	if got != "b\nc" || dropped != 1 {

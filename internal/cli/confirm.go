@@ -59,9 +59,6 @@ func (m chatModel) confirmView() string {
 		return ""
 	}
 	width := m.width
-	if width < 1 {
-		width = 1
-	}
 	hint := hintKeyStyle.Render("enter") + hintLabelStyle.Render(" allow") +
 		sepStyle.Render(" · ") +
 		hintKeyStyle.Render("esc") + hintLabelStyle.Render(" deny")

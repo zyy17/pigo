@@ -18,6 +18,24 @@ import (
 	"github.com/zyy17/pigo/internal/coding"
 )
 
+// testChat is a real session so the model can call it without a nil check.
+func testChat(t *testing.T) chatModel {
+	t.Helper()
+	session, err := coding.New(coding.Config{
+		Workspace:     t.TempDir(),
+		UserSkillsDir: t.TempDir(),
+		APIKey:        "test",
+		Model:         "test-model",
+		Stream: func(context.Context, ai.Request) (<-chan ai.Event, error) {
+			return nil, context.Canceled
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newChat(session)
+}
+
 func TestChatLayout(t *testing.T) {
 	dir := t.TempDir()
 	session, err := coding.New(coding.Config{
@@ -92,7 +110,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 		t.Fatalf("long footer was not truncated: %s", long)
 	}
 
-	m := newChat(nil)
+	m := testChat(t)
 	m.modelName = strings.Repeat("m", 40)
 	m.root = strings.Repeat("x", 80)
 	m.busy = true
@@ -107,7 +125,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 }
 
 func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	var text strings.Builder
 	for range 40 {
@@ -135,7 +153,7 @@ func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
 }
 
 func TestChatShowsToolsAndText(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	m.apply(agent.Event{Type: agent.ToolStart, ToolName: "write_file", Args: []byte(`{"path":"add.go"}`)})
 	m.apply(agent.Event{Type: agent.ToolEnd, ToolName: "write_file", Result: "wrote add.go (20 bytes)"})
@@ -163,7 +181,7 @@ func TestChatShowsToolsAndText(t *testing.T) {
 }
 
 func TestExitClearsTheLiveView(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	if m.View().Content == "" {
 		t.Fatal("expected a live view")
@@ -183,7 +201,7 @@ func TestExitClearsTheLiveView(t *testing.T) {
 }
 
 func TestCtrlDQuitsWhenIdle(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(40, 12)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	m = next.(chatModel)
@@ -197,7 +215,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 		t.Fatalf("quit command was %T", cmd())
 	}
 
-	m = newChat(nil)
+	m = testChat(t)
 	m.resize(40, 12)
 	m.comp.insert("keep")
 	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
@@ -206,7 +224,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 		t.Fatal("ctrl-d quit with text in the composer")
 	}
 
-	m = newChat(nil)
+	m = testChat(t)
 	m.resize(40, 12)
 	m.busy = true
 	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
@@ -326,7 +344,7 @@ func TestWrapKeepsWordsAndCaret(t *testing.T) {
 }
 
 func TestCaretStaysInTheInput(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
@@ -372,7 +390,7 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 		t.Fatalf("preview: %s", preview)
 	}
 
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(40, 24)
 	m.addBlock(kindAssistant, src)
 	wide := m.renderBlock(m.blocks[0])
@@ -396,7 +414,7 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 }
 
 func TestTranscriptScroll(t *testing.T) {
-	m := newChat(nil)
+	m := testChat(t)
 	m.resize(80, 24)
 	var text strings.Builder
 	for i := range 80 {
@@ -485,7 +503,7 @@ func TestTranscriptScroll(t *testing.T) {
 		t.Fatal("esc while busy jumped to the tail")
 	}
 
-	m = newChat(nil)
+	m = testChat(t)
 	m.resize(80, 24)
 	m.addBlock(kindAssistant, text.String())
 	m.scroll = 0
