@@ -96,7 +96,7 @@ sequenceDiagram
     end
 ```
 
-`internal/coding` is the only place that names dangerous shell commands. It matches `run_command` against a short denylist:
+`internal/coding` is the only place that names dangerous shell commands. It matches `run_command` against a short denylist. Options may follow a path (`rm ~ -rf`); words after `--` are operands:
 
 - `rm -rf` of `/`, `~`, or `$HOME`
 - `sudo`
@@ -121,7 +121,7 @@ enter allow · esc deny
 
 Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips the check. The chat screen and the line REPL share one command table: `/exit`, `exit`, `quit`, `/quit`, and `/reset`.
 
-This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
+This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, `git -C`, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
 
 ## Tests
 

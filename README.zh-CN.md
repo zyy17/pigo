@@ -52,7 +52,7 @@ sequenceDiagram
     participant Tools as 工具
     User->>Agent: 提示
     loop 停止前
-        Agent->>Model: 记录
+        Agent->>Model: 提示和工具
         Model-->>Agent: 助手消息
         Agent->>Tools: 工具调用
         Tools-->>Agent: 工具结果
