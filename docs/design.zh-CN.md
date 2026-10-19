@@ -55,7 +55,7 @@ sequenceDiagram
     participant Model as 模型
     participant Tools as 工具
     User->>Agent: 提示
-    loop 一次
+    loop 每圈一次模型调用
         Agent->>Model: 记录
         Model-->>Agent: 消息
         alt 工具调用
@@ -96,7 +96,7 @@ sequenceDiagram
     end
 ```
 
-只有 `internal/coding` 列出危险的 shell 命令。它用一张短拒绝表匹配 `run_command`：
+只有 `internal/coding` 列出危险的 shell 命令。它用一张短拒绝表匹配 `run_command`。选项可以写在路径后面（如 `rm ~ -rf`）；`--` 之后的词一律当操作数：
 
 - 对 `/`、`~` 或 `$HOME` 执行 `rm -rf`
 - `sudo`
@@ -121,7 +121,7 @@ enter allow · esc deny
 
 Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过检查。聊天画面和行会话共用一张命令表：`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。
 
-这是一张模式拒绝表。脚本、编码、别名，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
+这是一张模式拒绝表。脚本、编码、别名、`git -C`，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
 
 ## 测试
 
