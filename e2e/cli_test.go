@@ -7,15 +7,15 @@ import (
 	"testing"
 
 	"github.com/zyy17/pigo/internal/cli"
-	"github.com/zyy17/pigo/internal/e2etest"
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestCLIOneShotRunsTheChain(t *testing.T) {
 	dir := t.TempDir()
 	home := t.TempDir()
 	isolateConfig(t, home, dir)
-	_, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{
+	_, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{
 			ID: "call_write", Name: "write_file",
 			Args: `{"path":"hello.txt","content":"hi\n"}`,
 		}}},
@@ -50,8 +50,8 @@ func TestCLISkillExpandsBeforeTheModel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{
 			ID: "call_write", Name: "write_file",
 			Args: `{"path":"ping.txt","content":"ping\n"}`,
 		}}},
@@ -119,7 +119,7 @@ func TestCLIConfigPrecedenceReachesTheRequest(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{{Text: "ok"}})
+			script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{{Text: "ok"}})
 			t.Setenv("PIGO_PROVIDER", "openai")
 			t.Setenv("OPENAI_API_KEY", "test-key")
 			t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
@@ -146,7 +146,7 @@ func isolateConfig(t *testing.T, home, dir string) {
 	t.Chdir(dir)
 }
 
-func firstUser(req e2etest.Request) string {
+func firstUser(req scriptapi.Request) string {
 	for _, msg := range req.Messages {
 		if msg.Role == "user" {
 			return msg.Content

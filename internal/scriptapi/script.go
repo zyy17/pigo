@@ -1,7 +1,7 @@
-// Package e2etest is a scripted OpenAI-compatible chat server for tests.
+// Package scriptapi is a scripted OpenAI-compatible chat server for tests.
 // It streams one reply per request and records the request shape.
 // It does not store the Authorization header.
-package e2etest
+package scriptapi
 
 import (
 	"encoding/json"

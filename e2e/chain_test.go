@@ -11,25 +11,25 @@ import (
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
-	"github.com/zyy17/pigo/internal/e2etest"
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestToolChainPairsResults(t *testing.T) {
 	dir := t.TempDir()
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{
 			ID: "call_write", Name: "write_file",
 			Args: `{"path":"note.txt","content":"alpha\n"}`,
 		}}},
-		{Calls: []e2etest.Call{
+		{Calls: []scriptapi.Call{
 			{ID: "call_read", Name: "read_file", Args: `{"path":"note.txt"}`},
 			{ID: "call_list", Name: "list_dir", Args: `{"path":"."}`},
 		}},
-		{Calls: []e2etest.Call{{
+		{Calls: []scriptapi.Call{{
 			ID: "call_edit", Name: "edit_file",
 			Args: `{"path":"note.txt","old_string":"alpha","new_string":"beta"}`,
 		}}},
-		{Calls: []e2etest.Call{{
+		{Calls: []scriptapi.Call{{
 			ID: "call_bash", Name: "run_command",
 			Args: `{"command":"printf 'from-bash\\n' > ran.txt"}`,
 		}}},
@@ -80,8 +80,8 @@ func TestToolChainPairsResults(t *testing.T) {
 func TestAbortDuringToolAndDuringStream(t *testing.T) {
 	t.Run("command", func(t *testing.T) {
 		dir := t.TempDir()
-		_, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{{
-			Calls: []e2etest.Call{{
+		_, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{{
+			Calls: []scriptapi.Call{{
 				ID: "call_sleep", Name: "run_command",
 				Args: `{"command":"sleep 30"}`,
 			}},
@@ -119,7 +119,7 @@ func TestAbortDuringToolAndDuringStream(t *testing.T) {
 
 	t.Run("stream", func(t *testing.T) {
 		dir := t.TempDir()
-		script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{{Hang: true}})
+		script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{{Hang: true}})
 		session := newSession(t, dir, srv.URL+"/v1")
 		errCh := make(chan error, 1)
 		go func() {
@@ -153,7 +153,7 @@ func newSession(t *testing.T, dir, base string) *coding.Session {
 	return session
 }
 
-func assertPaired(t *testing.T, reqs []e2etest.Request) {
+func assertPaired(t *testing.T, reqs []scriptapi.Request) {
 	t.Helper()
 	for i, req := range reqs {
 		open := map[string]bool{}
@@ -174,7 +174,7 @@ func assertPaired(t *testing.T, reqs []e2etest.Request) {
 	}
 }
 
-func toolText(req e2etest.Request, id string) string {
+func toolText(req scriptapi.Request, id string) string {
 	for _, msg := range req.Messages {
 		if msg.Role == "tool" && msg.ToolCallID == id {
 			return msg.Content

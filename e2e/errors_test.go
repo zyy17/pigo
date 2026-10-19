@@ -9,24 +9,24 @@ import (
 	"testing"
 
 	"github.com/zyy17/pigo/internal/agent"
-	"github.com/zyy17/pigo/internal/e2etest"
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestModelErrors(t *testing.T) {
 	tests := []struct {
 		name  string
-		reply e2etest.Reply
+		reply scriptapi.Reply
 		want  string
 	}{
-		{name: "unauthorized", reply: e2etest.Reply{Status: http.StatusUnauthorized, Body: "nope"}, want: "HTTP 401"},
-		{name: "bad request", reply: e2etest.Reply{Status: http.StatusBadRequest, Body: "bad"}, want: "HTTP 400"},
-		{name: "bad chunk", reply: e2etest.Reply{BadJSON: true}, want: "bad stream chunk"},
-		{name: "dropped stream", reply: e2etest.Reply{Drop: true, Text: "partial"}, want: "stream ended"},
+		{name: "unauthorized", reply: scriptapi.Reply{Status: http.StatusUnauthorized, Body: "nope"}, want: "HTTP 401"},
+		{name: "bad request", reply: scriptapi.Reply{Status: http.StatusBadRequest, Body: "bad"}, want: "HTTP 400"},
+		{name: "bad chunk", reply: scriptapi.Reply{BadJSON: true}, want: "bad stream chunk"},
+		{name: "dropped stream", reply: scriptapi.Reply{Drop: true, Text: "partial"}, want: "stream ended"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			_, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{tt.reply})
+			_, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{tt.reply})
 			session := newSession(t, dir, srv.URL+"/v1")
 			err := session.Prompt(context.Background(), "go")
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
@@ -38,7 +38,7 @@ func TestModelErrors(t *testing.T) {
 
 func TestConnectionRefused(t *testing.T) {
 	dir := t.TempDir()
-	_, srv := e2etest.NewServer(t, "test-key", nil)
+	_, srv := scriptapi.NewServer(t, "test-key", nil)
 	base := srv.URL + "/v1"
 	srv.Close()
 	session := newSession(t, dir, base)
@@ -50,9 +50,9 @@ func TestConnectionRefused(t *testing.T) {
 
 func TestDroppedToolCallIsPaired(t *testing.T) {
 	dir := t.TempDir()
-	_, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{{
+	_, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{{
 		Drop: true,
-		Calls: []e2etest.Call{{
+		Calls: []scriptapi.Call{{
 			ID: "call_write", Name: "write_file",
 			Args: `{"path":"x.txt","content":"no"}`,
 		}},

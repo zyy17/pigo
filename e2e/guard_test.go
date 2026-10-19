@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/zyy17/pigo/internal/coding"
-	"github.com/zyy17/pigo/internal/e2etest"
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestDangerousCommandDenied(t *testing.T) {
@@ -17,8 +17,8 @@ func TestDangerousCommandDenied(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("ok"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{ID: "c1", Name: "run_command", Args: `{"command":"rm -rf /"}`}}},
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{ID: "c1", Name: "run_command", Args: `{"command":"rm -rf /"}`}}},
 		{Text: "stopped"},
 	})
 	session := newSession(t, dir, srv.URL+"/v1")
@@ -41,8 +41,8 @@ func TestDangerousCommandDenied(t *testing.T) {
 
 func TestYoloRunsMatchedCommand(t *testing.T) {
 	dir := t.TempDir()
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{ID: "c1", Name: "run_command", Args: `{"command":"git push --force"}`}}},
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{ID: "c1", Name: "run_command", Args: `{"command":"git push --force"}`}}},
 		{Text: "done"},
 	})
 	session, err := coding.New(coding.Config{
@@ -81,8 +81,8 @@ func TestSafeDeleteStillRuns(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(build, "a.o"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{ID: "c1", Name: "run_command", Args: `{"command":"rm -rf ./build"}`}}},
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{ID: "c1", Name: "run_command", Args: `{"command":"rm -rf ./build"}`}}},
 		{Text: "removed"},
 	})
 	session := newSession(t, dir, srv.URL+"/v1")
