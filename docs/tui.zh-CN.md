@@ -23,6 +23,7 @@ flowchart TD
 | 职责 | 文件 | 从这里看 |
 | --- | --- | --- |
 | 模型和一轮任务 | `tui.go` | `chatModel`、`runTUI`、`apply`、`submit` |
+| 排队的后续消息 | `queue.go` | `queueText`、`takeQueue` |
 | 按键 | `keys.go` | `onKey`、`onComposer`、`continuedLine` |
 | 画面 | `view.go` | `View`、`layout`、`chromeAbove`、`footer` |
 | 对话区滚动 | `scroll.go` | `scrollRows`、`transcriptWindow`、`scroll` |
@@ -56,7 +57,7 @@ flowchart TB
 
 ## 一轮任务
 
-Enter 把输入条写入对话区，清空输入，并调用 `Session.Prompt`。这一轮还在跑时，输入条仍然可以编辑，Enter 不会丢掉草稿，而是排成一条后续消息。再按一次 Enter，用换行接在同一条后面。对话区里它是一行暗色文字：`↳ queued:`。这一轮正常结束时 `AgentEnd` 把它发出去；若被打断或出错，它回到输入条。`/exit` 先中止再退出。`/reset` 要等这一轮结束。`/skill:name` 和普通文本一样排队。`runTUI` 订阅会话，用 `program.Send` 把每条事件送成 `streamMsg`。模型上没有事件通道。文本增量积在 `live` 里，画成助手气泡。工具开始是一行 `• Ran`，结果是一小段暗色预览。`AgentEnd` 清掉 `busy`，并记下状态。`scroll` 是可见对话的第一行。负数表示跟着末尾，所以上翻之前新输出贴在底部。
+Enter 把输入条写入对话区，清空输入，并调用 `Session.Prompt`。这一轮还在跑时，输入条仍然可以编辑，Enter 不会丢掉草稿，而是排成一条后续消息。再按一次 Enter，用换行接在同一条后面。对话区里它是一行暗色文字：`↳ queued:`。这一轮正常结束时 `AgentEnd` 把它发出去，并留下正在输入的草稿。若被打断、出错，或 Esc、Ctrl-C 赶在这一轮结束时按下，排队的内容回到输入条。`/exit`、`exit` 和 `quit` 先中止再退出。`/reset` 要等这一轮结束。`/skill:name` 和普通文本一样排队。排队的技能展开失败时，那一行回到输入条。`runTUI` 订阅会话，用 `program.Send` 把每条事件送成 `streamMsg`。模型上没有事件通道。文本增量积在 `live` 里，画成助手气泡。工具开始是一行 `• Ran`，结果是一小段暗色预览。`AgentEnd` 清掉 `busy`，并记下状态。`scroll` 是可见对话的第一行。负数表示跟着末尾，所以上翻之前新输出贴在底部。
 
 ```mermaid
 stateDiagram-v2
@@ -66,6 +67,7 @@ stateDiagram-v2
     Confirm --> Running: 允许
     Confirm --> Running: 拒绝
     Running --> Idle: 结束
+    Running --> Running: 完成，发出排队
     Running --> Idle: 打断
     Idle --> [*]: 退出
 ```
