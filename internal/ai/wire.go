@@ -67,7 +67,7 @@ type wireDelta struct {
 type wireDeltaCall struct {
 	Index    int          `json:"index"`
 	ID       string       `json:"id,omitempty"`
-	Function wireFunction `json:"function,omitempty"`
+	Function wireFunction `json:"function"`
 }
 
 // encodeRequest translates the transcript into a chat-completions body.
@@ -116,7 +116,9 @@ func wireMessageOf(msg Message) (wireMessage, error) {
 
 func assistantWire(msg Message) wireMessage {
 	wire := wireMessage{Role: "assistant"}
-	if msg.Text != "" {
+	// OpenAI rejects an assistant message that omits content when it has
+	// no tool calls. A tool-call message leaves content off.
+	if msg.Text != "" || len(msg.ToolCalls) == 0 {
 		wire.Content = strPtr(msg.Text)
 	}
 	for _, call := range msg.ToolCalls {

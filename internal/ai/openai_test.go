@@ -188,6 +188,9 @@ func TestRequestShape(t *testing.T) {
 	if strings.Join(roles, ",") != "system,user,assistant,tool" {
 		t.Fatalf("roles %v", roles)
 	}
+	if _, ok := msgs[2].(map[string]any)["content"]; ok {
+		t.Fatal("tool-call assistant set content")
+	}
 	toolMsg := msgs[3].(map[string]any)
 	if toolMsg["tool_call_id"] != "call_1" || toolMsg["content"] != "error: missing" {
 		t.Fatalf("tool message %#v", toolMsg)
@@ -200,6 +203,41 @@ func TestRequestShape(t *testing.T) {
 	params := fn["parameters"].(map[string]any)
 	if params["additionalProperties"] != false {
 		t.Fatalf("schema %#v", params)
+	}
+}
+
+func TestEmptyAssistantSendsContent(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		writeSSE(w, chunk(map[string]any{
+			"choices": []any{map[string]any{
+				"delta":         map[string]any{"content": "ok"},
+				"finish_reason": "stop",
+			}},
+		}))
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	evs := mustStream(t, srv.URL+"/v1", ai.Request{
+		Model: "demo",
+		Messages: []ai.Message{
+			ai.User("hi"),
+			ai.Assistant("", ai.StopStop),
+		},
+	})
+	for _, ev := range evs {
+		if ev.Type == ai.EventError {
+			t.Fatal(ev.Err)
+		}
+	}
+	msgs, _ := body["messages"].([]any)
+	assistant := msgs[1].(map[string]any)
+	if assistant["role"] != "assistant" || assistant["content"] != "" {
+		t.Fatalf("assistant %#v", assistant)
 	}
 }
 
