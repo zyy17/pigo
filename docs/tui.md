@@ -59,6 +59,8 @@ Short history stays at the top of the pane. The spare rows sit above the compose
 
 Enter commits the composer, clears it, and calls `Session.Prompt`. While a turn is running the composer stays editable, and Enter queues one follow-up instead of dropping it. A second Enter appends a newline to that same message. The transcript shows it as one dim line, `↳ queued:`. `AgentEnd` sends the queue when the turn finishes and leaves a draft the user is still typing. An interrupt, an error, or Esc or Ctrl-C that lands as the turn ends puts the queue back in the composer. `/exit`, `exit`, and `quit` abort and quit. `/reset` is refused until the turn ends. `/skill:name` queues like plain text. A queued skill that fails to expand goes back into the composer. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
 
+A resumed session is drawn before the first frame. `newChat` copies the saved messages into the same blocks a live turn uses: user text, assistant text, `• Ran` lines, and the short tool preview. `/reset` clears what the model will see and clears the token total. The lines already on screen stay, with a separator under them. When a session file existed, a second line names that id (`previous session …`). The next prompt starts a new file. Quit still prints nothing after leaving the alternate screen. Resume from the shell with `--continue` or `--session`, as described in [design.md](design.md#sessions).
+
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
@@ -115,6 +117,6 @@ Bubble Tea asks the terminal for keyboard disambiguation and turns it off on qui
 ## Limits
 
 - There is no `--no-alt-screen`. A terminal session is always the alternate screen.
-- Quit prints nothing. There is no resume handle. Session token counts stay on the status line and are not saved.
+- Quit prints nothing. Resume from the shell with `--continue` or `--session`. Session token counts stay on the status line and are not saved with the transcript.
 - A scroll offset is a wrapped line. Resizing rewraps from the source, so the same offset can land on a different sentence.
 - Shift+Enter is a plain Enter on terminals that do not answer the keyboard-disambiguation query.
