@@ -213,6 +213,62 @@ func TestRequestShape(t *testing.T) {
 	}
 }
 
+func TestPartialToolArgumentsAreJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		args []byte
+		want string
+	}{
+		{name: "fragment", args: []byte(`{"path":`), want: "{}"},
+		{name: "empty", args: nil, want: "{}"},
+		{name: "blank", args: []byte(" \t"), want: "{}"},
+		{name: "object", args: []byte(`{"path":"a.txt"}`), want: `{"path":"a.txt"}`},
+		{name: "null", args: []byte("null"), want: "null"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				writeSSE(w, chunk(map[string]any{
+					"choices": []any{map[string]any{
+						"delta":         map[string]any{"content": "ok"},
+						"finish_reason": "stop",
+					}},
+				}))
+				io.WriteString(w, "data: [DONE]\n\n")
+			}))
+			defer srv.Close()
+
+			evs := mustStream(t, srv.URL+"/v1", ai.Request{
+				Model: "demo",
+				Messages: []ai.Message{
+					ai.User("read"),
+					ai.Assistant("", ai.StopToolUse, ai.ToolCall{
+						ID: "call_1", Name: "read_file", Arguments: tt.args,
+					}),
+					ai.ToolResult("call_1", "read_file", "stream ended", true),
+				},
+			})
+			for _, ev := range evs {
+				if ev.Type == ai.EventError {
+					t.Fatal(ev.Err)
+				}
+			}
+			msgs, _ := body["messages"].([]any)
+			assistant := msgs[1].(map[string]any)
+			calls := assistant["tool_calls"].([]any)
+			fn := calls[0].(map[string]any)["function"].(map[string]any)
+			got, _ := fn["arguments"].(string)
+			if got != tt.want || !json.Valid([]byte(got)) {
+				t.Fatalf("arguments %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEmptyAssistantSendsContent(t *testing.T) {
 	var body map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

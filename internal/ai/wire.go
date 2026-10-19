@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -168,11 +169,23 @@ func assistantWire(msg Message) wireMessage {
 			Type: "function",
 			Function: wireFunction{
 				Name:      call.Name,
-				Arguments: string(call.Arguments),
+				Arguments: toolArguments(call.Arguments),
 			},
 		})
 	}
 	return wire
+}
+
+// toolArguments is the JSON text sent as function.arguments.
+// A dropped stream can leave a fragment in the transcript. The session file
+// stores "{}" for that fragment. The endpoint rejects the next request when
+// the live transcript still has it.
+func toolArguments(raw []byte) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) > 0 && json.Valid(raw) {
+		return string(raw)
+	}
+	return "{}"
 }
 
 func wireTools(tools []Tool) []wireTool {
