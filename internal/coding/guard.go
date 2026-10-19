@@ -2,6 +2,7 @@ package coding
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -12,7 +13,7 @@ func riskyCommand(command string) (string, bool) {
 	if strings.Contains(compact(command), ":(){:|:&};:") {
 		return "fork bomb", true
 	}
-	for _, seg := range segments(tokens(command)) {
+	for _, seg := range split(tokens(command), ";", "\n", "&&", "||") {
 		if reason, ok := riskySegment(seg); ok {
 			return reason, true
 		}
@@ -56,7 +57,7 @@ func riskySegment(toks []string) (string, bool) {
 }
 
 func pipeToShell(toks []string) bool {
-	parts := splitTokens(toks, "|")
+	parts := split(toks, "|")
 	if len(parts) < 2 {
 		return false
 	}
@@ -102,50 +103,43 @@ func ddToDisk(args []string) bool {
 }
 
 func gitPushForce(args []string) bool {
-	push := -1
-	for i, arg := range args {
-		if arg == "push" {
-			push = i
-			break
-		}
-		if !strings.HasPrefix(arg, "-") {
-			return false
-		}
-	}
-	if push < 0 {
+	rest, ok := afterSubcommand(args, "push")
+	if !ok {
 		return false
 	}
-	for _, arg := range args[push+1:] {
-		if arg == "--force" || arg == "-f" {
-			return true
+	flags, long, _ := parseArgs(leadingFlags(rest))
+	return strings.ContainsRune(flags, 'f') || slices.Contains(long, "--force")
+}
+
+// afterSubcommand is the words after name. A non-option before name means
+// this is not that subcommand. git -C dir push is the case that returns false.
+func afterSubcommand(args []string, name string) ([]string, bool) {
+	for i, arg := range args {
+		if arg == name {
+			return args[i+1:], true
 		}
-		if isShortCluster(arg) && strings.ContainsRune(arg, 'f') {
-			return true
+		if !strings.HasPrefix(arg, "-") {
+			return nil, false
 		}
 	}
-	return false
+	return nil, false
 }
 
 func chmodRoot777(args []string) bool {
-	recursive := false
-	mode := ""
-	var paths []string
-	for _, arg := range args {
-		switch {
-		case arg == "-R" || arg == "-r" || arg == "--recursive":
-			recursive = true
-		case isShortCluster(arg) && (strings.ContainsRune(arg, 'R') || strings.ContainsRune(arg, 'r')):
-			recursive = true
-		case mode == "" && isOctalMode(arg):
-			mode = arg
-		case arg != "--" && !strings.HasPrefix(arg, "-"):
-			paths = append(paths, arg)
-		}
-	}
-	if !recursive || (mode != "777" && mode != "0777") {
+	flags, long, operands := parseArgs(leadingFlags(args))
+	if !strings.ContainsAny(flags, "rR") && !slices.Contains(long, "--recursive") {
 		return false
 	}
-	for _, path := range paths {
+	mode := ""
+	for _, arg := range operands {
+		if mode == "" && isOctalMode(arg) {
+			mode = arg
+		}
+	}
+	if mode != "777" && mode != "0777" {
+		return false
+	}
+	for _, path := range operands {
 		if path == "/" || path == "//" || path == "/*" {
 			return true
 		}
@@ -154,30 +148,9 @@ func chmodRoot777(args []string) bool {
 }
 
 func rmRootOrHome(args []string) bool {
-	recursive, force := false, false
-	var paths []string
-	operands := false
-	for _, arg := range args {
-		switch {
-		case arg == "--":
-			operands = true
-		case !operands && arg == "--recursive":
-			recursive = true
-		case !operands && arg == "--force":
-			force = true
-		case !operands && isShortCluster(arg):
-			if strings.ContainsRune(arg, 'r') || strings.ContainsRune(arg, 'R') {
-				recursive = true
-			}
-			if strings.ContainsRune(arg, 'f') {
-				force = true
-			}
-		case !operands && strings.HasPrefix(arg, "-"):
-		default:
-			operands = true
-			paths = append(paths, arg)
-		}
-	}
+	flags, long, paths := parseArgs(args)
+	recursive := strings.ContainsAny(flags, "rR") || slices.Contains(long, "--recursive")
+	force := strings.ContainsRune(flags, 'f') || slices.Contains(long, "--force")
 	if !recursive || !force {
 		return false
 	}
@@ -341,32 +314,63 @@ func tokens(command string) []string {
 	return out
 }
 
-func segments(toks []string) [][]string {
-	var segs [][]string
-	var cur []string
-	for _, tok := range toks {
-		if tok == ";" || tok == "\n" || tok == "&&" || tok == "||" {
-			segs = append(segs, cur)
-			cur = nil
-			continue
-		}
-		cur = append(cur, tok)
-	}
-	segs = append(segs, cur)
-	return segs
-}
-
-func splitTokens(toks []string, sep string) [][]string {
+// split breaks toks on any separator in seps. The separators are dropped.
+func split(toks []string, seps ...string) [][]string {
 	var parts [][]string
 	var cur []string
 	for _, tok := range toks {
-		if tok == sep {
+		if slices.Contains(seps, tok) {
 			parts = append(parts, cur)
 			cur = nil
 			continue
 		}
 		cur = append(cur, tok)
 	}
-	parts = append(parts, cur)
-	return parts
+	return append(parts, cur)
+}
+
+// parseArgs splits short-flag letters, long options, and operands.
+// "--" ends options and is not an operand, so a later word that looks
+// like a flag is still an operand. The first operand also ends options.
+func parseArgs(args []string) (flags string, long, operands []string) {
+	opt := true
+	for _, arg := range args {
+		switch {
+		case arg == "--" && opt:
+			opt = false
+		case opt && strings.HasPrefix(arg, "--"):
+			long = append(long, arg)
+		case opt && isShortCluster(arg):
+			flags += arg[1:]
+		default:
+			operands = append(operands, arg)
+			opt = false
+		}
+	}
+	return flags, long, operands
+}
+
+// leadingFlags moves options in front of operands. chmod and git accept
+// a flag after a path; rm does not, so only those two call this.
+// "--" still ends options, and words after it stay operands.
+func leadingFlags(args []string) []string {
+	var opt, rest []string
+	end := false
+	for _, arg := range args {
+		switch {
+		case end || arg == "--":
+			end = true
+			if arg != "--" {
+				rest = append(rest, arg)
+			}
+		case strings.HasPrefix(arg, "-"):
+			opt = append(opt, arg)
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	if len(rest) == 0 {
+		return opt
+	}
+	return append(append(opt, "--"), rest...)
 }
