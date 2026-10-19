@@ -76,8 +76,8 @@ Esc during a turn calls `Abort`. Esc on the confirm panel only denies that comma
 
 | Key | When | What |
 | --- | --- | --- |
-| Enter | idle | send, or complete a partial slash command |
-| Tab | slash menu open | complete the selected item (same as Enter) |
+| Enter | idle | send, or complete a partial slash command; a full command name is sent |
+| Tab | slash menu open | complete the selected item and never send |
 | Shift+Enter, Alt+Enter, Ctrl+J | idle | insert a newline |
 | Enter after a trailing `\` | idle | newline, and drop that backslash |
 | Esc | running | interrupt |
