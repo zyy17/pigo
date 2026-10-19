@@ -9,11 +9,11 @@ import (
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
-	"github.com/zyy17/pigo/internal/defaults"
 	"github.com/zyy17/pigo/internal/skills"
 )
 
 // Config selects the model endpoint and the workspace.
+// The caller passes Model and BaseURL. Only an empty Workspace becomes ".".
 // Stream, when set, replaces the HTTP client. Tests use it.
 // UserSkillsDir overrides ~/.pi/agent/skills. An empty value uses that default.
 type Config struct {
@@ -121,12 +121,6 @@ func skillDirs(list []skills.Skill) []string {
 }
 
 func (c Config) applyDefaults() Config {
-	if strings.TrimSpace(c.BaseURL) == "" {
-		c.BaseURL = defaults.BaseURL
-	}
-	if strings.TrimSpace(c.Model) == "" {
-		c.Model = defaults.Model
-	}
 	if strings.TrimSpace(c.Workspace) == "" {
 		c.Workspace = "."
 	}

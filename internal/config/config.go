@@ -13,15 +13,13 @@ import (
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-
-	builtin "github.com/zyy17/pigo/internal/defaults"
 )
 
 const (
 	// DefaultModel is the built-in model name.
-	DefaultModel = builtin.Model
+	DefaultModel = "gpt-5.6-luna"
 	// DefaultBaseURL is the OpenAI-compatible API root.
-	DefaultBaseURL = builtin.BaseURL
+	DefaultBaseURL = "https://api.openai.com/v1"
 )
 
 // Config is every setting the CLI needs. Prompt comes from flags only.

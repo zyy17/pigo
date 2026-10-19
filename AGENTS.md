@@ -16,7 +16,6 @@ It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Pref
 | `internal/agent` | Transcript, ask/act loop, `Tool.Execute` | HTTP wire details, workspace paths, skills, CLI |
 | `internal/coding` | Workspace, file/shell tools, system prompt | SSE parsing, Cobra, Bubble Tea |
 | `internal/skills` | Finding `SKILL.md`, short prompt list | Agent loop, HTTP, TUI |
-| `internal/defaults` | Built-in model name, API root, long-line buffer | Callers, files, and the screen |
 | `internal/config` | Flat settings load (koanf) | Agent, AI, and coding packages, and the screen |
 | `internal/cli` | Cobra, TUI, `/skill:name`, wiring | Path confinement and wire encoding |
 
