@@ -12,7 +12,7 @@ import (
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
-	"github.com/zyy17/pigo/internal/e2etest"
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestHeadlessChatCompletesATurn(t *testing.T) {
@@ -25,8 +25,8 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(text), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{
-		{Calls: []e2etest.Call{{
+	_, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Calls: []scriptapi.Call{{
 			ID: "call_write", Name: "write_file",
 			Args: `{"path":"hello.txt","content":"hi\n"}`,
 		}}},
@@ -121,7 +121,7 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 
 func TestHeadlessEscInterruptsAHang(t *testing.T) {
 	dir := t.TempDir()
-	script, srv := e2etest.NewServer(t, "test-key", []e2etest.Reply{{Hang: true}})
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{{Hang: true}})
 	session, err := coding.New(coding.Config{
 		APIKey:        "test-key",
 		BaseURL:       srv.URL + "/v1",
