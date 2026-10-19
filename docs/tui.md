@@ -56,7 +56,7 @@ Short history stays at the top of the pane. The spare rows sit above the compose
 
 ## A turn
 
-Enter commits the composer, clears it, and calls `Session.Prompt`. `runTUI` subscribes to the session and `program.Send`s each event as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
+Enter commits the composer, clears it, and calls `Session.Prompt`. `runTUI` subscribes to the session and sends each event with `program.Send` as `streamMsg`. The model has no event channel. Text deltas accumulate in `live` and paint as the assistant bubble. A tool start becomes a `• Ran` row; the result is a short dim preview. `AgentEnd` clears `busy` and records the status. `scroll` is the first visible transcript line. A negative value follows the tail, so new output stays at the bottom until the user pages up.
 
 ```mermaid
 stateDiagram-v2
