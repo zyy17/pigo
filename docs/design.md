@@ -143,7 +143,7 @@ The chat screen is described in [tui.md](tui.md).
 
 `read_file` has one extra allowance. After the workspace check fails, it may still open a file inside a discovered skill directory. That is how a skill in `~/.pi/agent/skills` can be loaded. `write_file` and `edit_file` do not get that allowance.
 
-`run_command` starts `bash` with the workspace as its working directory. Bash is required on Unix. The process is ordinary. `OPENAI_API_KEY` is removed from its environment. The denylist in [Dangerous commands](#dangerous-commands) can block the command before that process starts.
+`run_command` starts `bash` with the workspace as its working directory. Bash is required on Unix. On Windows it uses `cmd /C`. The process is ordinary. Long output keeps the tail. `OPENAI_API_KEY` is removed from its environment. The denylist in [Dangerous commands](#dangerous-commands) can block the command before that process starts.
 
 ## Skills
 

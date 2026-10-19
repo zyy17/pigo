@@ -143,7 +143,7 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 `read_file` 多一条许可。工作区检查失败后，它仍可以打开已发现技能目录中的文件。`~/.pi/agent/skills` 里的技能就是这样被读到的。`write_file` 和 `edit_file` 没有这条许可。
 
-`run_command` 以工作区为当前目录启动 `bash`。Unix 上需要安装 bash。它是普通进程。环境里的 `OPENAI_API_KEY` 会被去掉。[危险命令](#危险命令) 里的拒绝表可以在进程启动前拦住这条命令。
+`run_command` 以工作区为当前目录启动 `bash`。Unix 上需要安装 bash。Windows 上用 `cmd /C`。它是普通进程。过长的输出保留末尾。环境里的 `OPENAI_API_KEY` 会被去掉。[危险命令](#危险命令) 里的拒绝表可以在进程启动前拦住这条命令。
 
 ## 技能
 
