@@ -56,7 +56,7 @@ sequenceDiagram
     participant Tools as 工具
     User->>Agent: 提示
     loop 每圈一次模型调用
-        Agent->>Model: 记录
+        Agent->>Model: 提示和工具
         Model-->>Agent: 消息
         alt 工具调用
             Agent->>Tools: 一次调用
