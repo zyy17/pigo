@@ -143,11 +143,14 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// Terminals send pasted newlines as \r. A tab has no fixed width in a cell grid.
+var pasteText = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\t", "    ")
+
 func (m *chatModel) onPaste(text string) {
 	if m.ask != nil || text == "" {
 		return
 	}
-	m.comp.insert(text)
+	m.comp.insert(pasteText.Replace(text))
 	m.noteTyped()
 }
 
