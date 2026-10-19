@@ -34,6 +34,7 @@ type chatModel struct {
 	ready            bool
 	busy             bool
 	quitting         bool
+	ask              *confirmReq
 	suggestDismissed bool
 	started          time.Time
 	cur              *frameCursor
@@ -57,7 +58,22 @@ func runTUI(session *coding.Session) error {
 	// and turn that mode off again so the user's shell is unchanged.
 	enableShiftEnter(os.Stdout)
 	defer disableShiftEnter(os.Stdout)
-	program := tea.NewProgram(
+	// The closure captures program. Prompt cannot run until Run is looping,
+	// so Send is never called on a nil program.
+	var program *tea.Program
+	if session != nil {
+		session.SetConfirm(func(ctx context.Context, command, reason string) (bool, error) {
+			reply := make(chan bool, 1)
+			program.Send(confirmMsg{req: &confirmReq{command: command, reason: reason, reply: reply}})
+			select {
+			case ok := <-reply:
+				return ok, nil
+			case <-ctx.Done():
+				return false, ctx.Err()
+			}
+		})
+	}
+	program = tea.NewProgram(
 		model,
 		tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}),
 		tea.WithFilter(rewriteKeys),
@@ -105,6 +121,9 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.newline()
+	case confirmMsg:
+		m.ask = msg.req
+		return m, nil
 	case tea.KeyMsg:
 		return m.onKey(msg)
 	}
@@ -126,6 +145,9 @@ func (m *chatModel) resize(width, height int) tea.Cmd {
 
 func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
+		if m.ask != nil {
+			m = m.finishConfirm(false)
+		}
 		if m.busy {
 			if m.session != nil {
 				m.session.Abort()
@@ -134,6 +156,9 @@ func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.quitting = true
 		return m, tea.Quit
+	}
+	if m.ask != nil {
+		return m.answerConfirm(msg)
 	}
 	if m.busy {
 		// Esc stops the turn. The working row is the hint for that key.

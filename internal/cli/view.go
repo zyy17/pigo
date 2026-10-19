@@ -67,7 +67,11 @@ func (m chatModel) layout() (body string, x, y int) {
 	}
 	input, cx, cy := m.inputBlock()
 	var above []string
-	if row := m.workingRow(); row != "" {
+	if panel := m.confirmView(); panel != "" {
+		// The confirm panel takes the working-row slot. Esc denies the
+		// command, so the interrupt hint stays hidden.
+		above = append(above, panel, "")
+	} else if row := m.workingRow(); row != "" {
 		// The blank under the row sits before the composer. The blank above
 		// it is the scrollback gap, or the one line added with the live tail.
 		above = append(above, row, "")

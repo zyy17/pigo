@@ -249,11 +249,21 @@ func (m chatModel) inputRows() int {
 	if room < 1 {
 		return 1
 	}
-	if m.busy && room > 1 {
-		room-- // working row
-	}
-	if m.busy && room > 1 {
-		room-- // blank line under the working row
+	if m.ask != nil {
+		// Four confirm lines plus the blank under the panel.
+		for range 5 {
+			if room <= 1 {
+				break
+			}
+			room--
+		}
+	} else {
+		if m.busy && room > 1 {
+			room-- // working row
+		}
+		if m.busy && room > 1 {
+			room-- // blank line under the working row
+		}
 	}
 	if m.live != "" && room > 1 {
 		room-- // blank line above the working row
