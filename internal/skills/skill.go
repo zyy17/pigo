@@ -83,7 +83,7 @@ func loadDir(dir, root string, top bool, visited map[string]bool) []Skill {
 	// target can walk far more than the skills directory. A SKILL.md at the
 	// link itself is still one skill. Nested links that stay inside the root
 	// are still walked.
-	if !Within(root, resolved) {
+	if !within(root, resolved) {
 		return oneSkill(filepath.Join(dir, "SKILL.md"))
 	}
 
@@ -146,8 +146,7 @@ func skipEntry(name string) bool {
 	return strings.HasPrefix(name, ".") || name == "node_modules"
 }
 
-// Within reports whether path is root or a path under root.
-func Within(root, path string) bool {
+func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
 		return false
@@ -202,7 +201,7 @@ func fileInDir(path string) bool {
 	if err != nil {
 		return false
 	}
-	return Within(realDir, realFile)
+	return within(realDir, realFile)
 }
 
 func clipRunes(s string, n int) string {

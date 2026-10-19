@@ -3,21 +3,14 @@ package coding
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
+	"github.com/zyy17/pigo/internal/defaults"
 	"github.com/zyy17/pigo/internal/skills"
-)
-
-const (
-	defaultBaseURL = "https://api.openai.com/v1"
-	// defaultModel matches config.DefaultModel. This package does not import
-	// config; New still fills an empty model for direct callers.
-	defaultModel = "gpt-5.6-luna"
 )
 
 // Config selects the model endpoint and the workspace.
@@ -129,10 +122,10 @@ func skillDirs(list []skills.Skill) []string {
 
 func (c Config) applyDefaults() Config {
 	if strings.TrimSpace(c.BaseURL) == "" {
-		c.BaseURL = defaultBaseURL
+		c.BaseURL = defaults.BaseURL
 	}
 	if strings.TrimSpace(c.Model) == "" {
-		c.Model = defaultModel
+		c.Model = defaults.Model
 	}
 	if strings.TrimSpace(c.Workspace) == "" {
 		c.Workspace = "."
@@ -143,9 +136,6 @@ func (c Config) applyDefaults() Config {
 func (c Config) stream() (ai.StreamFunc, error) {
 	if c.Stream != nil {
 		return c.Stream, nil
-	}
-	if strings.TrimSpace(c.APIKey) == "" {
-		return nil, errors.New("API key is not set")
 	}
 	client := &ai.Client{BaseURL: c.BaseURL, APIKey: c.APIKey}
 	return client.Stream, nil
