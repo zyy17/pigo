@@ -30,7 +30,7 @@ func commandTool(ws *Workspace) agent.Tool {
 	return newTool(runCommandTool,
 		"Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated. The timeout is 30 seconds.",
 		ai.ObjectSchema(map[string]ai.Property{
-			"command": ai.StringProperty("Shell command to execute"),
+			"command": ai.StringProperty("Bash command to execute"),
 		}, "command"),
 		func(ctx context.Context, args commandArgs) (string, error) {
 			return runCommand(ctx, ws, args.Command)
