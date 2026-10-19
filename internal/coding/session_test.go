@@ -57,7 +57,9 @@ func TestSessionEditsAFile(t *testing.T) {
 		t.Fatalf("tool count %d", len(script.requests()[0].Tools))
 	}
 
-	session.Reset()
+	if err := session.Reset(); err != nil {
+		t.Fatal(err)
+	}
 	script.append(ai.Assistant("fresh", ai.StopStop))
 	if err := session.Prompt(context.Background(), "again"); err != nil {
 		t.Fatal(err)

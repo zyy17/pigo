@@ -22,6 +22,10 @@ type Config struct {
 	Stream       ai.StreamFunc
 	MaxTurns     int
 	Before       BeforeToolCall
+	// Record runs after each transcript message is stored. The coding
+	// session uses it to append a session file. Nil keeps the transcript
+	// in memory only. SetMessages does not call Record.
+	Record func(ai.Message) error
 }
 
 // Agent runs the tool loop. Prompt is not safe for concurrent use.
@@ -31,6 +35,7 @@ type Agent struct {
 	stream   ai.StreamFunc
 	maxTurns int
 	before   BeforeToolCall
+	record   func(ai.Message) error
 	subs     []func(Event)
 	usage    usageTotals
 
@@ -66,6 +71,7 @@ func New(cfg Config) (*Agent, error) {
 		stream:   cfg.Stream,
 		maxTurns: cfg.MaxTurns,
 		before:   cfg.Before,
+		record:   cfg.Record,
 	}, nil
 }
 
@@ -82,6 +88,12 @@ func (a *Agent) Subscribe(fn func(Event)) {
 // Messages returns a copy of the transcript.
 func (a *Agent) Messages() []ai.Message {
 	return a.state.snapshot()
+}
+
+// SetMessages replaces the transcript. Resume uses it to install a session
+// file that is already on disk, so Record is not called.
+func (a *Agent) SetMessages(msgs []ai.Message) {
+	a.state.Messages = append([]ai.Message(nil), msgs...)
 }
 
 // Reset drops the transcript and the token totals.
@@ -150,8 +162,15 @@ func (a *Agent) clearCancel() {
 	a.mu.Unlock()
 }
 
-func (a *Agent) add(msg ai.Message) {
+// add stores one transcript message, then asks Record to persist it.
+// The message stays in memory when Record fails, so this process can keep
+// going. The file stops at the last line that was written.
+func (a *Agent) add(msg ai.Message) error {
 	a.state.Messages = append(a.state.Messages, msg)
+	if a.record == nil {
+		return nil
+	}
+	return a.record(msg)
 }
 
 func (a *Agent) emit(ev Event) {

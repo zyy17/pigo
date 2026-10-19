@@ -93,6 +93,11 @@ Environment:
   OPENAI_BASE_URL   OpenAI-compatible API root (default %s)
   OPENAI_MODEL      model name that endpoint accepts (default %s)
   PIGO_YOLO         set to 1 or true to skip the dangerous-command check
+  PIGO_SESSION_DIR  directory for session files (default ~/.pigo/sessions)
+
+Sessions are saved as JSONL unless --no-session is set.
+--continue resumes the newest session for this workspace.
+--session resumes a file path, an id, or a unique id prefix.
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
 A yolo: true key in those files skips the same check.
@@ -132,6 +137,11 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or "+config.DefaultModel+")")
 	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or "+config.DefaultBaseURL+")")
 	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "run dangerous shell commands without asking")
+	cmd.Flags().BoolVarP(&flags.Continue, "continue", "c", false, "resume the newest session for this workspace")
+	cmd.Flags().StringVar(&flags.Session, "session", "", "resume a session file, id, or unique id prefix")
+	cmd.Flags().BoolVar(&flags.NoSession, "no-session", false, "do not read or write a session file")
+	cmd.Flags().StringVar(&flags.SessionDir, "session-dir", "", "sessions directory (default: ~/.pigo/sessions or PIGO_SESSION_DIR)")
+	cmd.MarkFlagsMutuallyExclusive("continue", "session", "no-session")
 	return cmd
 }
 
@@ -143,12 +153,18 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 	if err := checkProvider(cfg); err != nil {
 		return err
 	}
+	dir, resume, err := sessionChoice(cfg)
+	if err != nil {
+		return err
+	}
 	session, err := coding.New(coding.Config{
-		APIKey:    cfg.APIKey,
-		BaseURL:   cfg.BaseURL,
-		Model:     cfg.Model,
-		Workspace: cfg.Workspace,
-		Yolo:      cfg.Yolo,
+		APIKey:     cfg.APIKey,
+		BaseURL:    cfg.BaseURL,
+		Model:      cfg.Model,
+		Workspace:  cfg.Workspace,
+		Yolo:       cfg.Yolo,
+		SessionDir: dir,
+		Resume:     resume,
 	})
 	if err != nil {
 		return err
@@ -157,11 +173,32 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 	if cfg.Prompt == "" && interactiveTerminal(in, out) {
 		return runTUI(session)
 	}
+	if n := len(session.Messages()); n > 0 {
+		fmt.Fprintf(out, "resumed %s (%d messages)\n", session.SessionID(), n)
+	}
 	session.Subscribe(func(ev agent.Event) { render(out, ev) })
 	if cfg.Prompt != "" {
 		return app.runLine(cfg.Prompt)
 	}
 	return app.repl()
+}
+
+func sessionChoice(cfg config.Config) (string, string, error) {
+	if cfg.NoSession {
+		return "", "", nil
+	}
+	dir := cfg.SessionDir
+	if dir == "" {
+		var err error
+		dir, err = coding.DefaultSessionRoot()
+		if err != nil {
+			return "", "", err
+		}
+	}
+	if cfg.Continue {
+		return dir, coding.ResumeLatest, nil
+	}
+	return dir, cfg.Session, nil
 }
 
 func interactiveTerminal(in io.Reader, out io.Writer) bool {
@@ -197,8 +234,20 @@ func (a *app) repl() error {
 		case cmdQuit:
 			return nil
 		case cmdReset:
-			a.session.Reset()
+			// The file is already on disk. Say which one, then start a new file.
+			// Clearing the screen transcript is not the same as deleting that file.
+			saved := ""
+			if a.session.SessionFile() != "" {
+				saved = a.session.SessionID()
+			}
+			if err := a.session.Reset(); err != nil {
+				fmt.Fprintf(a.out, "error: %v\n", err)
+				continue
+			}
 			fmt.Fprintln(a.out, "transcript cleared")
+			if saved != "" {
+				fmt.Fprintf(a.out, "previous session %s\n", saved)
+			}
 			continue
 		}
 		if err := a.runLine(line); err != nil {

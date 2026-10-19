@@ -537,6 +537,51 @@ func TestTranscriptScroll(t *testing.T) {
 	}
 }
 
+func TestResumedTranscriptIsShown(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	session, err := coding.New(coding.Config{
+		Workspace:     dir,
+		UserSkillsDir: t.TempDir(),
+		Model:         "fake",
+		SessionDir:    sessions,
+		Stream: func(context.Context, ai.Request) (<-chan ai.Event, error) {
+			ch := make(chan ai.Event, 2)
+			go func() {
+				defer close(ch)
+				ch <- ai.Event{Type: ai.EventTextDelta, Text: "noted plum"}
+				ch <- ai.Event{Type: ai.EventDone, Message: ai.Assistant("noted plum", ai.StopStop)}
+			}()
+			return ch, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Prompt(context.Background(), "remember the word plum"); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := coding.New(coding.Config{
+		Workspace:     dir,
+		UserSkillsDir: t.TempDir(),
+		Model:         "fake",
+		SessionDir:    sessions,
+		Resume:        coding.ResumeLatest,
+		Stream: func(context.Context, ai.Request) (<-chan ai.Event, error) {
+			return nil, context.Canceled
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := newChat(resumed)
+	m.resize(80, 24)
+	got := m.transcript()
+	if !strings.Contains(got, "remember the word plum") || !strings.Contains(got, "noted plum") {
+		t.Fatalf("resumed transcript:\n%s", got)
+	}
+}
+
 func assertWidth(t *testing.T, view string, width int) {
 	t.Helper()
 	for _, line := range strings.Split(view, "\n") {
