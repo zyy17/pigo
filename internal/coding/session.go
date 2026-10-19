@@ -2,6 +2,7 @@ package coding
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -28,14 +29,21 @@ type Config struct {
 	UserSkillsDir string
 	MaxTurns      int
 	Stream        ai.StreamFunc
+	// Yolo skips the dangerous-command check.
+	Yolo bool
+	// Confirm, when set, is asked before a matched command runs.
+	// A nil Confirm denies the command.
+	Confirm func(ctx context.Context, command, reason string) (bool, error)
 }
 
 // Session is one coding-agent conversation in a workspace.
 type Session struct {
-	agent  *agent.Agent
-	root   string
-	model  string
-	skills []skills.Skill
+	agent   *agent.Agent
+	root    string
+	model   string
+	skills  []skills.Skill
+	yolo    bool
+	confirm func(ctx context.Context, command, reason string) (bool, error)
 }
 
 // New opens the workspace and builds the agent.
@@ -54,17 +62,58 @@ func New(cfg Config) (*Session, error) {
 		userDir = skills.DefaultUserDir()
 	}
 	found := skills.Discover(ws.Root(), userDir)
+	// The hook closes over this session so Confirm can be set after New.
+	session := &Session{
+		root:    ws.Root(),
+		model:   cfg.Model,
+		skills:  found,
+		yolo:    cfg.Yolo,
+		confirm: cfg.Confirm,
+	}
 	ag, err := agent.New(agent.Config{
 		SystemPrompt: buildSystemPrompt(ws.Root(), found),
 		Model:        cfg.Model,
 		Tools:        Tools(ws, skillDirs(found)),
 		Stream:       stream,
 		MaxTurns:     cfg.MaxTurns,
+		Before:       session.beforeTool,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Session{agent: ag, root: ws.Root(), model: cfg.Model, skills: found}, nil
+	session.agent = ag
+	return session, nil
+}
+
+// SetConfirm installs the interactive check. Call it before Prompt.
+// A nil confirm denies dangerous commands. The TUI is the only caller.
+func (s *Session) SetConfirm(fn func(ctx context.Context, command, reason string) (bool, error)) {
+	s.confirm = fn
+}
+
+func (s *Session) beforeTool(ctx context.Context, call ai.ToolCall) (agent.Decision, error) {
+	if s.yolo || call.Name != runCommandTool {
+		return agent.Decision{}, nil
+	}
+	var args commandArgs
+	if err := json.Unmarshal(call.Arguments, &args); err != nil {
+		return agent.Decision{}, nil
+	}
+	reason, dangerous := riskyCommand(args.Command)
+	if !dangerous {
+		return agent.Decision{}, nil
+	}
+	if s.confirm == nil {
+		return agent.Decision{Block: true, Reason: reason}, nil
+	}
+	allow, err := s.confirm(ctx, args.Command, reason)
+	if err != nil {
+		return agent.Decision{}, err
+	}
+	if !allow {
+		return agent.Decision{Block: true, Reason: reason}, nil
+	}
+	return agent.Decision{}, nil
 }
 
 func skillDirs(list []skills.Skill) []string {
