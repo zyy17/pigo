@@ -68,7 +68,7 @@ func (m *chatModel) chromeAbove() []string {
 	above := []string{""} // blank line under the transcript
 	if panel := m.confirmView(); panel != "" {
 		// The confirm panel takes the working-row slot. Esc denies the
-		// command, so the interrupt hint stays hidden.
+		// command or the file change, so the interrupt hint stays hidden.
 		above = append(above, panel, "")
 	} else if row := m.workingRow(); row != "" {
 		above = append(above, row, "")

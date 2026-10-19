@@ -30,6 +30,8 @@ func TestSessionEditsAFile(t *testing.T) {
 		UserSkillsDir: t.TempDir(),
 		Model:         "fake",
 		Stream:        script.stream,
+		// Yolo skips review so this test can follow the edit itself.
+		Yolo: true,
 	})
 	if err != nil {
 		t.Fatal(err)

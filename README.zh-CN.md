@@ -112,14 +112,19 @@ make build
 终端在备用屏幕上打开聊天。按键见 [docs/tui.zh-CN.md](docs/tui.zh-CN.md)。
 
 - Enter 发送。Esc 或 Ctrl-C 取消这一轮。这一轮进行中输入条仍可编辑，Enter 会排成一条后续消息（Esc 打断）。
-- 拒绝表上的 shell 命令会先询问。Enter 或 `y` 允许，Esc 或 `n` 拒绝。`-p` 和逐行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 跳过检查。
+- 拒绝表上的 shell 命令会先询问。Enter 或 `y` 允许，Esc 或 `n` 拒绝。`-p` 和逐行会话不询问，直接拒绝。
+- `write_file` 和 `edit_file` 会先给出 diff，按键相同。拒绝后工具结果是 `blocked:`，这一轮继续。`-p` 和逐行会话没有画面，所以拒绝这次改动（`blocked: file change needs review`）。
+- `--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 跳过这两次询问。一个开关表示不再询问，所以单次编辑也会跳过命令检查。
 - `/skill:name` 装入技能，`/reset` 清空当前会话记录并开始一个新的会话文件，`/exit` 退出。
 - 退出会离开备用屏幕。管道走逐行会话，不改屏幕。
 
 做完一个任务后退出：
 
 ```bash
-./pigo -p "Create hello.txt that says hi, then read it back"
+./pigo -p "Create hello.txt that says hi"
+# 拒绝写入；没有人可以询问
+
+./pigo --yolo -p "Create hello.txt that says hi, then read it back"
 ./pigo -w ~/src/app -p "Summarize the Go files in this directory"
 ```
 
@@ -167,7 +172,7 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 | `OPENAI_API_KEY` | 提供者是 `openai` 时的令牌 | 必填 |
 | `OPENAI_BASE_URL` | 该提供者的 API 根，通常以 `/v1` 结尾 | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-5.6-luna` |
-| `PIGO_YOLO` | 设为 `1` 或 `true` 时，危险 shell 命令不再询问 | 关闭 |
+| `PIGO_YOLO` | 设为 `1` 或 `true` 时，文件改动和危险 shell 命令都不再询问 | 关闭 |
 | `PIGO_SESSION_DIR` | 会话文件所在目录 | `~/.pigo/sessions` |
 
 `--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）、`--yolo`、`--continue`（`-c`）、`--session`、`--no-session` 和 `--session-dir` 覆盖环境变量。`-c`、`--session` 和 `--no-session` 不能一起用。API 密钥不做成命令行参数，避免进 shell 历史。
@@ -182,7 +187,14 @@ model: gpt-5.6-luna
 workspace: .
 ```
 
-单次运行打印的流和聊天画面相同：
+单次运行打印的流和聊天画面相同。没有 `--yolo` 时，文件改动在写入之前停下：
+
+```text
+→ write_file {"path":"hello.txt","content":"hi"}
+✗ blocked: file change needs review
+```
+
+`--yolo` 会把它写下去：
 
 ```text
 → write_file {"path":"hello.txt","content":"hi"}

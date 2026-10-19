@@ -24,7 +24,8 @@ type Config struct {
 	UserSkillsDir string
 	MaxTurns      int
 	Stream        ai.StreamFunc
-	// Yolo skips the dangerous-command check.
+	// Yolo skips file-change review and the dangerous-command check.
+	// It is the one switch for "do not ask".
 	Yolo bool
 	// SessionDir is the sessions root, the parent of the per-workspace directory.
 	// Empty leaves the transcript in memory.
@@ -33,15 +34,23 @@ type Config struct {
 	Resume string
 }
 
+// Confirm is one question shown before a tool runs.
+// Title is the prompt. Body is the command or the diff. Detail is the short line under it.
+type Confirm struct {
+	Title  string
+	Body   string
+	Detail string
+}
+
 // Session is one coding-agent conversation in a workspace.
 type Session struct {
 	agent   *agent.Agent
-	root    string
+	ws      *Workspace
 	model   string
 	skills  []skills.Skill
 	yolo    bool
 	journal *journal
-	confirm func(ctx context.Context, command, reason string) (bool, error)
+	confirm func(ctx context.Context, prompt Confirm) (bool, error)
 }
 
 // New opens the workspace and builds the agent.
@@ -62,7 +71,7 @@ func New(cfg Config) (*Session, error) {
 	found := skills.Discover(ws.Root(), userDir)
 	// The hook closes over this session so SetConfirm can be called after New.
 	session := &Session{
-		root:   ws.Root(),
+		ws:     ws,
 		model:  cfg.Model,
 		skills: found,
 		yolo:   cfg.Yolo,
@@ -110,15 +119,28 @@ func (s *Session) closeJournal() {
 }
 
 // SetConfirm installs the interactive check. Call it before Prompt.
-// A nil confirm denies dangerous commands. The TUI is the only caller.
-func (s *Session) SetConfirm(fn func(ctx context.Context, command, reason string) (bool, error)) {
+// A nil confirm denies dangerous commands and file changes.
+// The TUI is the only caller that asks. -p and the line session leave it nil.
+func (s *Session) SetConfirm(fn func(ctx context.Context, prompt Confirm) (bool, error)) {
 	s.confirm = fn
 }
 
 func (s *Session) beforeTool(ctx context.Context, call ai.ToolCall) (agent.Decision, error) {
-	if s.yolo || call.Name != runCommandTool {
+	// Yolo skips every question. The command denylist and file review share it.
+	if s.yolo {
 		return agent.Decision{}, nil
 	}
+	switch call.Name {
+	case runCommandTool:
+		return s.guardCommand(ctx, call)
+	case editToolName, writeToolName:
+		return s.reviewFile(ctx, call)
+	default:
+		return agent.Decision{}, nil
+	}
+}
+
+func (s *Session) guardCommand(ctx context.Context, call ai.ToolCall) (agent.Decision, error) {
 	var args commandArgs
 	if err := json.Unmarshal(call.Arguments, &args); err != nil {
 		return agent.Decision{}, nil
@@ -130,7 +152,11 @@ func (s *Session) beforeTool(ctx context.Context, call ai.ToolCall) (agent.Decis
 	if s.confirm == nil {
 		return agent.Decision{Block: true, Reason: reason}, nil
 	}
-	allow, err := s.confirm(ctx, args.Command, reason)
+	allow, err := s.confirm(ctx, Confirm{
+		Title:  "! allow this command?",
+		Body:   args.Command,
+		Detail: reason,
+	})
 	if err != nil {
 		return agent.Decision{}, err
 	}
@@ -169,7 +195,7 @@ func (c Config) stream() (ai.StreamFunc, error) {
 }
 
 // Root is the workspace directory.
-func (s *Session) Root() string { return s.root }
+func (s *Session) Root() string { return s.ws.Root() }
 
 // Model is the model name sent on each request.
 func (s *Session) Model() string { return s.model }

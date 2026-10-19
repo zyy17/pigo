@@ -19,7 +19,7 @@ It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Pref
 | `internal/config` | Flat settings load (koanf) | Agent, AI, and coding packages, and the screen |
 | `internal/cli` | Cobra, TUI, `/skill:name`, wiring | Path confinement and wire encoding |
 
-`BeforeToolCall` is the only core extension on a tool call. Bash denylist rules live in `internal/coding`. The TUI owns the confirm prompt. The agent core has no safety policy.
+`BeforeToolCall` is the only core extension on a tool call. Bash denylist rules and file-change review live in `internal/coding`. The TUI owns the confirm prompt. The agent core has no safety policy. `-p` and the line session deny both. `--yolo` skips both.
 
 Skills are not a new agent type. Discovery feeds the system prompt (name, description, path). `/skill:name` becomes an ordinary user message before `Prompt`. The loop still only sees messages and tools.
 

@@ -273,6 +273,8 @@ func TestChatRunsAWrite(t *testing.T) {
 		Workspace: dir,
 		APIKey:    "test",
 		Model:     "test-model",
+		// Yolo skips review so this test can follow a finished write.
+		Yolo: true,
 		Stream: func(ctx context.Context, req ai.Request) (<-chan ai.Event, error) {
 			step++
 			n := step
@@ -525,7 +527,7 @@ func TestTranscriptScroll(t *testing.T) {
 	m.addBlock(kindAssistant, text.String())
 	m.scroll = 0
 	reply := make(chan bool, 1)
-	m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
+	m.ask = &confirmReq{title: "! allow this command?", body: "sudo true", detail: "sudo", reply: reply}
 	m.busy = true
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
