@@ -22,6 +22,8 @@ func TestRiskyCommand(t *testing.T) {
 		"rm -rf $HOME",
 		`rm -rf "$HOME"`,
 		"rm -rf ${HOME}",
+		"rm ~ -rf",
+		"rm -r / -f",
 		"sudo apt update",
 		"sudo rm -rf ./build",
 		"/usr/bin/sudo true",

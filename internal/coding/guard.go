@@ -107,7 +107,7 @@ func gitPushForce(args []string) bool {
 	if !ok {
 		return false
 	}
-	flags, long, _ := parseArgs(rest, false)
+	flags, long, _ := parseArgs(rest)
 	return strings.ContainsRune(flags, 'f') || slices.Contains(long, "--force")
 }
 
@@ -126,7 +126,7 @@ func afterSubcommand(args []string, name string) ([]string, bool) {
 }
 
 func chmodRoot777(args []string) bool {
-	flags, long, operands := parseArgs(args, false)
+	flags, long, operands := parseArgs(args)
 	if !strings.ContainsAny(flags, "rR") && !slices.Contains(long, "--recursive") {
 		return false
 	}
@@ -148,7 +148,7 @@ func chmodRoot777(args []string) bool {
 }
 
 func rmRootOrHome(args []string) bool {
-	flags, long, paths := parseArgs(args, true)
+	flags, long, paths := parseArgs(args)
 	recursive := strings.ContainsAny(flags, "rR") || slices.Contains(long, "--recursive")
 	force := strings.ContainsRune(flags, 'f') || slices.Contains(long, "--force")
 	if !recursive || !force {
@@ -330,10 +330,10 @@ func split(toks []string, seps ...string) [][]string {
 }
 
 // parseArgs splits short-flag letters, long options, and operands.
-// "--" ends options and is not an operand. stop makes the first operand
-// end them too, which is how rm treats a later -rf as a filename.
-// chmod and git keep reading options after a path.
-func parseArgs(args []string, stop bool) (flags string, long, operands []string) {
+// Options may appear anywhere. "--" ends them and is not itself an operand,
+// so a later word that looks like a flag is still an operand. rm, chmod,
+// and git share this rule: GNU rm permutes options the same way.
+func parseArgs(args []string) (flags string, long, operands []string) {
 	opt := true
 	for _, arg := range args {
 		switch {
@@ -345,9 +345,6 @@ func parseArgs(args []string, stop bool) (flags string, long, operands []string)
 			flags += arg[1:]
 		default:
 			operands = append(operands, arg)
-			if stop {
-				opt = false
-			}
 		}
 	}
 	return flags, long, operands
