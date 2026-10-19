@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,22 +22,26 @@ type accumulator struct {
 }
 
 func (a *accumulator) consume(data string, out chan<- Event) error {
-	chunk, err := decodeChunk(data)
-	if err != nil {
-		return err
+	var chunk wireChunk
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return fmt.Errorf("bad stream chunk: %w", err)
 	}
-	if chunk.errText != "" {
-		return errors.New(chunk.errText)
+	if chunk.Error != nil && chunk.Error.Message != "" {
+		return errors.New(chunk.Error.Message)
 	}
-	if chunk.text != "" {
-		a.text.WriteString(chunk.text)
-		out <- Event{Type: EventTextDelta, Text: chunk.text}
+	if len(chunk.Choices) == 0 {
+		return nil
 	}
-	for _, call := range chunk.calls {
+	choice := chunk.Choices[0]
+	if choice.Delta.Content != "" {
+		a.text.WriteString(choice.Delta.Content)
+		out <- Event{Type: EventTextDelta, Text: choice.Delta.Content}
+	}
+	for _, call := range choice.Delta.ToolCalls {
 		a.absorb(call)
 	}
-	if chunk.finish != "" {
-		a.finish = chunk.finish
+	if choice.FinishReason != nil {
+		a.finish = *choice.FinishReason
 	}
 	return nil
 }
