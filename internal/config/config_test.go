@@ -110,4 +110,45 @@ func TestMissingFilesUseDefaults(t *testing.T) {
 	if cfg.BaseURL != "https://api.openai.com/v1" {
 		t.Fatalf("base %q", cfg.BaseURL)
 	}
+	if cfg.Yolo {
+		t.Fatal("yolo defaulted on")
+	}
+}
+
+func TestYoloPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PIGO_YOLO", "")
+	if err := os.WriteFile(filepath.Join(dir, "pigo.yaml"), []byte("yolo: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Yolo {
+		t.Fatal("yaml yolo was cleared")
+	}
+
+	t.Setenv("PIGO_YOLO", "1")
+	if err := os.WriteFile(filepath.Join(dir, "pigo.yaml"), []byte("yolo: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Yolo {
+		t.Fatal("PIGO_YOLO did not win")
+	}
+
+	t.Setenv("PIGO_YOLO", "")
+	cfg, err = Load(Config{Yolo: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Yolo {
+		t.Fatal("flag did not win")
+	}
 }
