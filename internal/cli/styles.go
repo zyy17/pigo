@@ -13,8 +13,6 @@ var (
 	statusReadyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#5FBF6A"))
 	statusWorkStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#F1BE58"))
 	statusBadStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#F09082"))
-	modelStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#00ADD8")).Bold(true)
-	pathStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	hintKeyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	hintLabelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	sepStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))

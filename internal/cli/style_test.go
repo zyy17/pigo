@@ -66,7 +66,7 @@ func ansiCodes(s string) string {
 func TestToolHeaderIsBoldAndPreviewIsDim(t *testing.T) {
 	m := newChat(nil)
 	m.resize(80, 24)
-	head := m.renderBlock(block{kind: kindTool, text: "• Ran ls"})
+	head := m.renderBlock(block{kind: kindRan, text: "• Ran ls"})
 	preview := m.renderBlock(block{kind: kindTool, text: "└ out"})
 	if !strings.Contains(head, "\x1b[1m") {
 		t.Fatalf("ran header is not bold: %q", head)

@@ -24,22 +24,6 @@ const (
 	previewLines = 3
 )
 
-type footerKind int
-
-const (
-	footStatus footerKind = iota
-	footSep
-	footModel
-	footPath
-	footKey
-	footLabel
-)
-
-type footerPiece struct {
-	kind footerKind
-	text string
-}
-
 func (m chatModel) View() tea.View {
 	body, x, y := m.layout()
 	v := tea.NewView(body)
@@ -145,43 +129,24 @@ func (m chatModel) statusWord() string {
 	return m.status
 }
 
-// composeFooter is the plain status line. The path shrinks first, then hints
-// drop from the end, and whatever remains is cut with an ellipsis.
+// footerHints uses the same interrupt key as the working row. Esc stops a
+// running turn. Ctrl-C also stops it, and quits when the turn is idle.
+const footerHints = "enter send · shift+enter newline · esc to interrupt · /exit"
+
 func composeFooter(state, model, root string, width int) string {
-	return piecesPlain(footerPieces(state, model, root, width))
+	left, right := footerSides(state, model, root, width)
+	if right == "" {
+		return left
+	}
+	return left + " · " + right
 }
 
 func styleFooter(state, model, root string, width int) string {
-	var b strings.Builder
-	for _, piece := range footerPieces(state, model, root, width) {
-		b.WriteString(piece.style(state).Render(piece.text))
+	left, right := footerSides(state, model, root, width)
+	if right == "" {
+		return statusStyle(state).Render(left)
 	}
-	return b.String()
-}
-
-func piecesPlain(parts []footerPiece) string {
-	var b strings.Builder
-	for _, piece := range parts {
-		b.WriteString(piece.text)
-	}
-	return b.String()
-}
-
-func (p footerPiece) style(state string) lipgloss.Style {
-	switch p.kind {
-	case footStatus:
-		return statusStyle(state)
-	case footModel:
-		return modelStyle
-	case footPath:
-		return pathStyle
-	case footKey:
-		return hintKeyStyle
-	case footLabel:
-		return hintLabelStyle
-	default:
-		return sepStyle
-	}
+	return statusStyle(state).Render(left) + sepStyle.Render(" · ") + hintLabelStyle.Render(right)
 }
 
 func statusStyle(state string) lipgloss.Style {
@@ -195,57 +160,23 @@ func statusStyle(state string) lipgloss.Style {
 	}
 }
 
-type footerHint struct {
-	key   string
-	label string
-}
-
-func footerPieces(state, model, root string, width int) []footerPiece {
+// footerSides is the status, model, and path on the left, and the keys on
+// the right. The left side shrinks first.
+func footerSides(state, model, root string, width int) (string, string) {
 	if width < 1 {
-		return nil
+		return "", ""
 	}
-	model = oneLine(model)
-	root = oneLine(root)
-	hints := []footerHint{
-		{key: "enter", label: " send"},
-		{key: "shift+enter", label: " newline"},
-		{key: "ctrl-c", label: " abort"},
-		{key: "/", label: "exit"},
+	left := oneLine(state) + " · " + oneLine(model) + " · " + oneLine(root)
+	right := footerHints
+	sep := ansi.StringWidth(" · ")
+	room := width - ansi.StringWidth(right) - sep
+	if room < 1 {
+		return ansi.Truncate(left, width, "…"), ""
 	}
-	head := []footerPiece{
-		{footStatus, state},
-		{footSep, " · "},
-		{footModel, model},
-		{footSep, " · "},
+	if ansi.StringWidth(left) > room {
+		left = ansi.Truncate(left, room, "…")
 	}
-	for n := len(hints); n >= 0; n-- {
-		var tail []footerPiece
-		for _, hint := range hints[:n] {
-			tail = append(tail, footerPiece{footSep, " · "}, footerPiece{footKey, hint.key}, footerPiece{footLabel, hint.label})
-		}
-		room := width - piecesWidth(head) - piecesWidth(tail)
-		if room < 1 {
-			continue
-		}
-		shown := root
-		if ansi.StringWidth(shown) > room {
-			shown = ansi.Truncate(root, room, "…")
-		}
-		if shown == "" {
-			continue
-		}
-		parts := append(append([]footerPiece{}, head...), footerPiece{footPath, shown})
-		parts = append(parts, tail...)
-		if piecesWidth(parts) <= width {
-			return parts
-		}
-	}
-	plain := ansi.Truncate(state+" · "+model+" · "+root, width, "…")
-	return []footerPiece{{footStatus, plain}}
-}
-
-func piecesWidth(parts []footerPiece) int {
-	return ansi.StringWidth(piecesPlain(parts))
+	return left, right
 }
 
 func (m chatModel) renderBlock(b block) string {
@@ -254,12 +185,13 @@ func (m chatModel) renderBlock(b block) string {
 		return m.paintUser(b.text)
 	case kindAssistant:
 		return m.paintAssistant(b.text)
+	case kindRan:
+		return m.paintLines(b.text, toolHeadStyle)
 	case kindTool:
-		return m.paintTool(b.text)
+		return m.paintLines(b.text, dimStyle)
+	case kindWorked:
+		return m.workedRule(b.text)
 	case kindInfo:
-		if strings.HasPrefix(b.text, "Worked for ") {
-			return m.workedRule(b.text)
-		}
 		return m.paintLines(b.text, dimStyle)
 	case kindError:
 		return m.paintLines(b.text, errStyle)
@@ -280,14 +212,6 @@ func (m chatModel) workedRule(label string) string {
 	}
 	rule := lead + strings.Repeat("─", width-ansi.StringWidth(lead))
 	return dimStyle.Render(rule)
-}
-
-func (m chatModel) paintTool(text string) string {
-	style := dimStyle
-	if strings.HasPrefix(text, "• Ran ") {
-		style = toolHeadStyle
-	}
-	return m.paintLines(text, style)
 }
 
 func (m chatModel) paintUser(text string) string {
