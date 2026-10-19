@@ -70,7 +70,7 @@ sequenceDiagram
 
 ### 工作区
 
-文件工具从工作区根目录解析路径，跟随符号链接，并拒绝根目录之外的目标。`read_file` 还可以打开已发现的技能目录，包括 `~/.pi/agent/skills`。`write_file` 和 `edit_file` 仍限制在工作区内。`run_command` 以工作区为当前目录启动 shell。
+文件工具从工作区根目录解析路径，跟随符号链接，并拒绝根目录之外的目标。`read_file` 还可以打开已发现的技能目录，包括 `~/.pi/agent/skills`。`write_file` 和 `edit_file` 仍限制在工作区内。`run_command` 以工作区为当前目录启动 `bash`。Unix 上需要安装 bash。
 
 ### 工具
 
@@ -80,7 +80,7 @@ sequenceDiagram
 | `write_file` | 创建或覆盖文件 |
 | `edit_file` | 精确替换一次字符串；`replace_all` 时替换全部 |
 | `list_dir` | 列出一个目录 |
-| `run_command` | 运行 shell 命令，超时 30 秒 |
+| `run_command` | 运行 bash 命令，超时 30 秒 |
 
 ### 技能
 

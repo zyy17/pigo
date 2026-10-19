@@ -31,7 +31,7 @@ Reuse Pi coding-agent system prompt sections where we already do. Do not invent 
 - Teachability first: a reader should follow one turn without jumping through many indirections.
 - Comments only on key paths and critical sections (workspace confinement, request encoding, tool-result pairing, skill discovery safety). No narrating comments.
 - Prefer the smallest clear code. Keep functions short and the tree easy to read at a glance. Do not pad or invent scope. Line count is a soft preference for simplicity, not a hard cap.
-- Pass `go test ./...` and `golangci-lint run ./...` (see `.golangci.yml` / `make lint`) before you claim done. `make test` includes hermetic end-to-end tests. `make e2e` is the live model suite (`//go:build e2e`) and skips without `OPENAI_API_KEY`.
+- Pass `go test ./...` and `golangci-lint run ./...` (see `.golangci.yml` / `make lint`) before you claim done. `make test` includes hermetic end-to-end tests. `make e2e` is the live model suite (`//go:build e2e`) and skips without `OPENAI_API_KEY` or `OPENAI_BASE_URL`.
 - Prefer existing patterns in the tree over new abstractions.
 
 ## CLI, config, TUI
