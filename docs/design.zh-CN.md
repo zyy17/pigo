@@ -20,7 +20,6 @@ flowchart TD
     cli --> skills
     cli --> agent
     cli --> ai
-    config --> skills
     coding --> skills
     coding --> agent
     coding --> ai
@@ -34,7 +33,7 @@ flowchart TD
 | `internal/agent` | 会话记录、询问再行动的循环、调用 `Tool.Execute` | HTTP、工作区、技能 |
 | `internal/coding` | 工作区、文件和 shell 工具、系统提示 | SSE 如何解析 |
 | `internal/skills` | `SKILL.md` 在哪里、提示词里的简短列表 | 循环和 HTTP |
-| `internal/config` | 命令行参数、环境变量、`.env`、YAML。引号用 `skills.Unquote` | 循环、HTTP 和画面 |
+| `internal/config` | 命令行参数、环境变量、`.env`、YAML | 循环、HTTP 和画面 |
 | `internal/cli` | Cobra、Bubble Tea、`/skill:name`、调用 `config.Load` | 路径检查和线路格式 |
 
 技能不会变成一种新的代理。编码会话发现技能后，要么把它们写进系统提示，要么在 `/skill:name` 时把文件贴进一条普通用户消息。`Agent.Prompt` 看到的仍然只是消息和工具。
@@ -43,7 +42,7 @@ flowchart TD
 
 会话记录是循环的记忆。一条消息有角色和文本；助手消息还可以带一组工具调用。工具结果是单独的角色 `toolResult`，并带上它回答的那次调用的 ID。
 
-OpenAI chat completions 的形状不同：工具调用嵌在 `function` 里，工具结果的角色是 `tool`。`wire.go` 为每一层 JSON 对象起一个具名类型。只有 `encodeRequest` 和 `decodeChunk` 做转换，用的是 `json.Marshal` 和 `json.Unmarshal`。程序其余部分保持更平坦的会话记录。代理事件的类型字段是 `EventType`。
+OpenAI chat completions 的形状不同：工具调用嵌在 `function` 里，工具结果的角色是 `tool`。`wire.go` 为每一层 JSON 对象起一个具名类型。`encodeRequest` 写出请求，累加器读入每个 `wireChunk`，两边都用 `json.Marshal` 和 `json.Unmarshal`。程序其余部分保持更平坦的会话记录。
 
 系统提示在构造请求时附上。它不写入会话记录，所以 `Reset` 可以丢掉消息，同时留下提示、模型和工具。
 
@@ -130,15 +129,13 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 ## 配置
 
-只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。它调用 `skills.Unquote`，所以 `.env` 和技能前言去掉引号的方式相同。`.env` 只填补进程里还没有的变量，给 shell 工具用，不会覆盖已经设置的变量。进程环境在这次填补之前就读好了，所以进程里的值仍然胜过 `.env`。
+只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。`.env` 和技能前言各自去掉一对引号。`.env` 只填补进程里还没有的变量，给 shell 工具用，不会覆盖已经设置的变量。进程环境在 `.env` 之后再写入，所以进程里的值仍然胜过 `.env`。
 
-从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过危险命令检查。
+从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`），然后是命令行参数。空值会被跳过。内置模型名和 API 根在 `internal/defaults`，config 和编码会话都读这里。模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过危险命令检查。
 
 一次聊天请求只发送 `model`、`messages`、`tools` 和 `stream`。它不发送 `max_tokens`、`temperature` 或 `top_p`。GPT-5 推理模型会拒绝这些字段；不发送它们，其他兼容 OpenAI 的提供者也继续用自己的默认值。
 
-聊天画面留在 `internal/cli`，使用备用屏幕，和 Codex 一样。退出时（`/exit`、空闲时的 Ctrl-C，或输入框为空时的 Ctrl-D）Bubble Tea 离开备用屏幕，终端回到 pigo 启动前的 shell 画面。退出后不再打印任何内容。逐行会话和 `-p` 不改屏幕，标准输出不是终端时也不会进入备用屏幕。Bubble Tea v2 把硬件光标放在输入条上，并向终端请求按键消歧义，这样 Shift+Enter 才能换行。
-
-字标、带边框的会话卡片和各回合画在上方的对话区里，块与块之间空一行。输入条、斜杠菜单、工作行和页脚固定在对话区下面。PgUp 和 PgDn 按对话区高度减一行滚动。鼠标滚轮一次一行。输入框空闲且斜杠菜单没打开时，Esc 回到最新一行。画面跟着最新内容时，新输出贴在底部。页脚上方空一行，工作行上下也各空一行。Enter 把用户的话写入对话区并清空输入框。这一轮还在跑时，输入条上方的工作行显示转圈、已用时间和 `esc to interrupt`。这时候的 Esc 用来打断，而不是跳回底部。危险命令会暂时用确认提示换掉工作行。启动时字标上方留一行空白。终端能区分时，Shift+Enter 换行；不能区分时，Ctrl+J、Alt+Enter 和行末一个 `\` 再按 Enter 同样换行。文本按终端宽度折行，窗口变化时按原文重新折行。`Agent.Prompt` 收到的仍然只是文本。
+聊天画面见 [tui.zh-CN.md](tui.zh-CN.md)。
 
 ## 工具和工作区
 

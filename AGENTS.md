@@ -16,7 +16,8 @@ It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Pref
 | `internal/agent` | Transcript, ask/act loop, `Tool.Execute` | HTTP wire details, workspace paths, skills, CLI |
 | `internal/coding` | Workspace, file/shell tools, system prompt | SSE parsing, Cobra, Bubble Tea |
 | `internal/skills` | Finding `SKILL.md`, short prompt list | Agent loop, HTTP, TUI |
-| `internal/config` | Flat settings load (koanf). Quotes via `skills.Unquote` | Agent, AI, and coding packages, and the screen |
+| `internal/defaults` | Built-in model name, API root, long-line buffer | Callers, files, and the screen |
+| `internal/config` | Flat settings load (koanf) | Agent, AI, and coding packages, and the screen |
 | `internal/cli` | Cobra, TUI, `/skill:name`, wiring | Path confinement and wire encoding |
 
 `BeforeToolCall` is the only core extension on a tool call. Bash denylist rules live in `internal/coding`. The TUI owns the confirm prompt. The agent core has no safety policy.
