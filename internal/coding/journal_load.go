@@ -67,9 +67,40 @@ func loadJournal(root, cwd, path string) (*journal, []ai.Message, error) {
 	return j, msgs, nil
 }
 
+// readHeader reads the first line. Continue and id lookup use it to recognize
+// a session. A bad line later is reported when that file is loaded.
 func readHeader(path string) (sessionHeader, error) {
-	header, _, err := readEntries(path)
-	return header, err
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return sessionHeader{}, err
+	}
+	lines := jsonlLines(data)
+	if len(lines) == 0 {
+		return sessionHeader{}, fmt.Errorf("session %s is empty", path)
+	}
+	return decodeHeader(path, lines[0])
+}
+
+func decodeHeader(path string, line jsonlLine) (sessionHeader, error) {
+	text := bytes.TrimPrefix(line.text, []byte("\uFEFF"))
+	var headerLine fileLine
+	if err := json.Unmarshal(text, &headerLine); err != nil {
+		return sessionHeader{}, fmt.Errorf("session %s:%d: %w", path, line.n, err)
+	}
+	if headerLine.Type != "session" || headerLine.ID == "" {
+		return sessionHeader{}, fmt.Errorf("session %s is not a pigo session", path)
+	}
+	header := sessionHeader{
+		Type:      headerLine.Type,
+		Version:   headerLine.Version,
+		ID:        headerLine.ID,
+		Timestamp: headerLine.Timestamp,
+		Cwd:       headerLine.Cwd,
+	}
+	if header.Version == 0 {
+		header.Version = 1
+	}
+	return header, nil
 }
 
 func readEntries(path string) (sessionHeader, []sessionEntry, error) {
@@ -91,24 +122,9 @@ func readEntries(path string) (sessionHeader, []sessionEntry, error) {
 			return sessionHeader{}, nil, fmt.Errorf("session %s is empty", path)
 		}
 	}
-	lines[0].text = bytes.TrimPrefix(lines[0].text, []byte("\uFEFF"))
-
-	var headerLine fileLine
-	if err := json.Unmarshal(lines[0].text, &headerLine); err != nil {
-		return sessionHeader{}, nil, fmt.Errorf("session %s:%d: %w", path, lines[0].n, err)
-	}
-	if headerLine.Type != "session" || headerLine.ID == "" {
-		return sessionHeader{}, nil, fmt.Errorf("session %s is not a pigo session", path)
-	}
-	header := sessionHeader{
-		Type:      headerLine.Type,
-		Version:   headerLine.Version,
-		ID:        headerLine.ID,
-		Timestamp: headerLine.Timestamp,
-		Cwd:       headerLine.Cwd,
-	}
-	if header.Version == 0 {
-		header.Version = 1
+	header, err := decodeHeader(path, lines[0])
+	if err != nil {
+		return sessionHeader{}, nil, err
 	}
 
 	entries := make([]sessionEntry, 0, len(lines)-1)

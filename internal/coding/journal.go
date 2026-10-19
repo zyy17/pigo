@@ -380,6 +380,8 @@ func newestSession(dir string) (string, error) {
 			continue
 		}
 		path := filepath.Join(dir, ent.Name())
+		// Header only. Continue loads this file next, so a bad line in it
+		// is reported there.
 		if _, err := readHeader(path); err != nil {
 			continue
 		}
