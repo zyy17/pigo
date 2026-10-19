@@ -106,7 +106,13 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	next, _ = m.Update(tea.KeyPressMsg{Text: "/sk", Code: '/'})
 	m = next.(chatModel)
 	menu := ansi.Strip(m.View().Content)
-	if !strings.Contains(menu, "/skill:greet") || !strings.Contains(menu, "Write a greeting") || strings.Contains(menu, "clear the transcript") {
+	resetRow := false
+	for _, line := range strings.Split(menu, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "/reset") {
+			resetRow = true
+		}
+	}
+	if !strings.Contains(menu, "/skill:greet") || !strings.Contains(menu, "Write a greeting") || resetRow {
 		t.Fatalf("slash menu:\n%s", menu)
 	}
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

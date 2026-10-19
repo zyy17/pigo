@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 )
 
@@ -20,7 +21,8 @@ import (
 const ResumeLatest = "continue"
 
 // sessionVersion is Pi's current header version. pigo writes a single chain,
-// which is a valid tree with one leaf. It does not write branches or compaction.
+// which is a valid tree with one leaf. It does not write branches. A
+// compaction summary is appended as its own entry and becomes the leaf.
 const sessionVersion = 3
 
 // journal is one append-only session file.
@@ -36,6 +38,10 @@ type journal struct {
 	file    *os.File
 	ids     map[string]struct{}
 	flushed bool
+	// msgIDs[i] is the file id of agent message i. A compaction entry stores
+	// msgIDs[From], not the agent's in-memory mN name.
+	msgIDs  []string
+	compact *agent.Compaction
 }
 
 // DefaultSessionRoot is ~/.pigo/sessions.
@@ -125,13 +131,67 @@ func (j *journal) append(msg ai.Message, model string) error {
 		return err
 	}
 	if !j.flushed {
-		return j.create(entry)
+		if err := j.create(entry); err != nil {
+			return err
+		}
+	} else if err := j.writeLine(entry); err != nil {
+		return err
+	} else {
+		j.leaf = entry.ID
+	}
+	j.msgIDs = append(j.msgIDs, entry.ID)
+	return nil
+}
+
+// appendCompaction writes the summary as the new leaf. The messages it
+// replaces stay in the file. firstKeptEntryId is the file id of the first
+// message the next request still sends. A later message parents this entry,
+// so a resume walks through the summary to the kept tail.
+func (j *journal) appendCompaction(c *agent.Compaction) error {
+	if c == nil || !j.flushed {
+		return nil
+	}
+	if c.From < 0 || c.From > len(j.msgIDs) {
+		return fmt.Errorf("compaction kept message %d is not in the session file", c.From)
+	}
+	kept := ""
+	if c.From < len(j.msgIDs) {
+		kept = j.msgIDs[c.From]
+	}
+	id, err := j.allocID()
+	if err != nil {
+		return err
+	}
+	var parent *string
+	if j.leaf != "" {
+		p := j.leaf
+		parent = &p
+	}
+	entry := sessionEntry{
+		Type:             "compaction",
+		ID:               id,
+		ParentID:         parent,
+		Timestamp:        isoTime(time.Now().UTC()),
+		Summary:          c.Summary,
+		FirstKeptEntryID: kept,
+		TokensBefore:     c.TokensBefore,
+		Details:          compactionDetailsOf(c),
 	}
 	if err := j.writeLine(entry); err != nil {
 		return err
 	}
 	j.leaf = entry.ID
 	return nil
+}
+
+func compactionDetailsOf(c *agent.Compaction) *compactionDetails {
+	if c == nil || (len(c.ReadFiles) == 0 && len(c.ModifiedFiles) == 0) {
+		return nil
+	}
+	return &compactionDetails{
+		ReadFiles:     append([]string(nil), c.ReadFiles...),
+		ModifiedFiles: append([]string(nil), c.ModifiedFiles...),
+	}
 }
 
 func (j *journal) messageEntry(msg ai.Message, model string) (sessionEntry, error) {
@@ -366,10 +426,21 @@ type sessionHeader struct {
 }
 
 // sessionEntry is one tree node. parentId is null for the root message.
+// Compaction fields are omitted on a message line.
 type sessionEntry struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	ParentID  *string         `json:"parentId"`
-	Timestamp string          `json:"timestamp"`
-	Message   json.RawMessage `json:"message,omitempty"`
+	Type             string             `json:"type"`
+	ID               string             `json:"id"`
+	ParentID         *string            `json:"parentId"`
+	Timestamp        string             `json:"timestamp"`
+	Message          json.RawMessage    `json:"message,omitempty"`
+	Summary          string             `json:"summary,omitempty"`
+	FirstKeptEntryID string             `json:"firstKeptEntryId,omitempty"`
+	TokensBefore     int                `json:"tokensBefore,omitempty"`
+	Details          *compactionDetails `json:"details,omitempty"`
+}
+
+// compactionDetails lists files the summary replaced. The names match Pi.
+type compactionDetails struct {
+	ReadFiles     []string `json:"readFiles,omitempty"`
+	ModifiedFiles []string `json:"modifiedFiles,omitempty"`
 }

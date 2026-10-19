@@ -115,7 +115,7 @@ make build
 - 拒绝表上的 shell 命令会先询问。Enter 或 `y` 允许，Esc 或 `n` 拒绝。`-p` 和逐行会话不询问，直接拒绝。
 - `write_file` 和 `edit_file` 会先给出 diff，按键相同。拒绝后工具结果是 `blocked:`，这一轮继续。`-p` 和逐行会话没有画面，所以拒绝这次改动（`blocked: file change needs review`）。
 - `--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 跳过这两次询问。一个开关表示不再询问，所以单次编辑也会跳过命令检查。
-- `/skill:name` 装入技能，`/reset` 清空当前会话记录并开始一个新的会话文件，`/exit` 退出。
+- `/skill:name` 装入技能，`/compact` 摘要更早的消息，`/reset` 清空当前会话记录并开始一个新的会话文件，`/exit` 退出。这一轮还在跑时 `/compact` 会等待。估计超过预留时，自动压缩做同样的摘要。下一轮发送这份摘要和最近的尾巴。切分和会话文件见 [docs/design.zh-CN.md](docs/design.zh-CN.md#上下文压缩)。
 - 退出会离开备用屏幕。管道走逐行会话，不改屏幕。
 
 做完一个任务后退出：
@@ -174,10 +174,14 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 | `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-5.6-luna` |
 | `PIGO_YOLO` | 设为 `1` 或 `true` 时，文件改动和危险 shell 命令都不再询问 | 关闭 |
 | `PIGO_SESSION_DIR` | 会话文件所在目录 | `~/.pigo/sessions` |
+| `PIGO_COMPACT` | `0` 或 `false` 关闭自动压缩。`1` 或 `true` 打开。自动压缩关闭时 `/compact` 仍可运行 | 打开 |
+| `PIGO_CONTEXT_WINDOW` | 上下文预算，单位是 token | `128000` |
+| `PIGO_RESERVE_TOKENS` | 预算下方留出的 token | `16384` |
+| `PIGO_KEEP_RECENT_TOKENS` | 原样保留的最近 token | `20000` |
 
 `--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）、`--yolo`、`--continue`（`-c`）、`--session`、`--no-session` 和 `--session-dir` 覆盖环境变量。`-c`、`--session` 和 `--no-session` 不能一起用。API 密钥不做成命令行参数，避免进 shell 历史。
 
-配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`、`yolo`、`session_dir`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。没有传 `--yolo` 时，不会把文件里的 `yolo: true` 改回关闭。`session_dir` 可以不写；空着就用 `~/.pigo/sessions`。
+配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`、`yolo`、`session_dir`、`compact`、`context_window`、`reserve_tokens`、`keep_recent_tokens`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。没有传 `--yolo` 时，不会把文件里的 `yolo: true` 改回关闭。`session_dir` 可以不写；空着就用 `~/.pigo/sessions`。
 
 ```yaml
 provider: openai

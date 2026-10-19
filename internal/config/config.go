@@ -24,17 +24,21 @@ const (
 
 // Config is every setting the CLI needs. Prompt comes from flags only.
 type Config struct {
-	Provider   string `koanf:"provider"`
-	APIKey     string `koanf:"api_key"`
-	BaseURL    string `koanf:"base_url"`
-	Model      string `koanf:"model"`
-	Workspace  string `koanf:"workspace"`
-	Yolo       bool   `koanf:"yolo"`
-	SessionDir string `koanf:"session_dir"`
-	Prompt     string `koanf:"-"`
-	Continue   bool   `koanf:"-"`
-	NoSession  bool   `koanf:"-"`
-	Session    string `koanf:"-"`
+	Provider         string `koanf:"provider"`
+	APIKey           string `koanf:"api_key"`
+	BaseURL          string `koanf:"base_url"`
+	Model            string `koanf:"model"`
+	Workspace        string `koanf:"workspace"`
+	Yolo             bool   `koanf:"yolo"`
+	SessionDir       string `koanf:"session_dir"`
+	Compact          bool   `koanf:"compact"`
+	ContextWindow    int    `koanf:"context_window"`
+	ReserveTokens    int    `koanf:"reserve_tokens"`
+	KeepRecentTokens int    `koanf:"keep_recent_tokens"`
+	Prompt           string `koanf:"-"`
+	Continue         bool   `koanf:"-"`
+	NoSession        bool   `koanf:"-"`
+	Session          string `koanf:"-"`
 }
 
 // envNames maps process variables onto the flat config keys.
@@ -61,7 +65,10 @@ func Load(flags Config) (Config, error) {
 		return Config{}, err
 	}
 	// The process map is applied after .env, so a real environment value wins.
-	env := envMap()
+	env, err := envMap()
+	if err != nil {
+		return Config{}, err
+	}
 	if err := loadDotEnv(k, ".env"); err != nil {
 		return Config{}, err
 	}
@@ -80,7 +87,21 @@ func Load(flags Config) (Config, error) {
 	cfg.Continue = flags.Continue
 	cfg.NoSession = flags.NoSession
 	cfg.Session = strings.TrimSpace(flags.Session)
-	return cfg.trimmed(), nil
+	cfg = cfg.trimmed()
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (cfg Config) validate() error {
+	if cfg.ContextWindow <= 0 {
+		return errors.New("context_window must be positive")
+	}
+	if cfg.ReserveTokens < 0 || cfg.KeepRecentTokens < 0 {
+		return errors.New("reserve_tokens and keep_recent_tokens must be zero or positive")
+	}
+	return nil
 }
 
 func (cfg Config) trimmed() Config {
@@ -96,11 +117,17 @@ func (cfg Config) trimmed() Config {
 }
 
 func defaults() map[string]any {
+	// Context numbers match agent.DefaultContextWindow, DefaultReserveTokens,
+	// and DefaultKeepRecentTokens. This package does not import the agent.
 	return map[string]any{
-		"provider":  "openai",
-		"base_url":  DefaultBaseURL,
-		"model":     DefaultModel,
-		"workspace": ".",
+		"provider":           "openai",
+		"base_url":           DefaultBaseURL,
+		"model":              DefaultModel,
+		"workspace":          ".",
+		"compact":            true,
+		"context_window":     128_000,
+		"reserve_tokens":     16_384,
+		"keep_recent_tokens": 20_000,
 	}
 }
 
@@ -134,7 +161,7 @@ func loadMap(k *koanf.Koanf, values map[string]any) error {
 	return k.Load(confmap.Provider(values, "."), nil)
 }
 
-func envMap() map[string]any {
+func envMap() (map[string]any, error) {
 	return overlay(os.Getenv)
 }
 

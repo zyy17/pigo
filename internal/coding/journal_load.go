@@ -8,19 +8,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 )
 
 // fileLine is one JSONL object. Header lines and tree entries share it
 // so the loader can branch on type before copying into a narrower struct.
 type fileLine struct {
-	Type      string          `json:"type"`
-	Version   int             `json:"version"`
-	ID        string          `json:"id"`
-	ParentID  *string         `json:"parentId"`
-	Timestamp string          `json:"timestamp"`
-	Cwd       string          `json:"cwd"`
-	Message   json.RawMessage `json:"message"`
+	Type             string             `json:"type"`
+	Version          int                `json:"version"`
+	ID               string             `json:"id"`
+	ParentID         *string            `json:"parentId"`
+	Timestamp        string             `json:"timestamp"`
+	Cwd              string             `json:"cwd"`
+	Message          json.RawMessage    `json:"message"`
+	Summary          string             `json:"summary"`
+	FirstKeptEntryID string             `json:"firstKeptEntryId"`
+	TokensBefore     int                `json:"tokensBefore"`
+	Details          *compactionDetails `json:"details"`
 }
 
 func loadJournal(root, cwd, path string) (*journal, []ai.Message, error) {
@@ -28,7 +33,7 @@ func loadJournal(root, cwd, path string) (*journal, []ai.Message, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	msgs, leaf, err := transcriptFrom(entries)
+	msgs, ids, compact, leaf, err := transcriptFrom(entries)
 	if err != nil {
 		return nil, nil, fmt.Errorf("session %s: %w", path, err)
 	}
@@ -50,6 +55,8 @@ func loadJournal(root, cwd, path string) (*journal, []ai.Message, error) {
 		file:    f,
 		ids:     map[string]struct{}{},
 		flushed: true,
+		msgIDs:  ids,
+		compact: compact,
 	}
 	for _, entry := range entries {
 		if entry.ID != "" {
@@ -111,11 +118,15 @@ func readEntries(path string) (sessionHeader, []sessionEntry, error) {
 			return sessionHeader{}, nil, fmt.Errorf("session %s:%d: extra session header", path, line.n)
 		}
 		entries = append(entries, sessionEntry{
-			Type:      raw.Type,
-			ID:        raw.ID,
-			ParentID:  raw.ParentID,
-			Timestamp: raw.Timestamp,
-			Message:   raw.Message,
+			Type:             raw.Type,
+			ID:               raw.ID,
+			ParentID:         raw.ParentID,
+			Timestamp:        raw.Timestamp,
+			Message:          raw.Message,
+			Summary:          raw.Summary,
+			FirstKeptEntryID: raw.FirstKeptEntryID,
+			TokensBefore:     raw.TokensBefore,
+			Details:          raw.Details,
 		})
 	}
 	return header, entries, nil
@@ -145,22 +156,28 @@ func jsonlLines(data []byte) []jsonlLine {
 // transcriptFrom walks the active leaf back to its root.
 // The leaf is the last line, which is where pigo appends. A side branch
 // stays in the file and is not sent to the model. Entries other than
-// message (usage, compaction, labels) stay in the walk so the chain
+// message (usage, label, compaction) stay in the walk so the chain
 // connects, and they do not become transcript messages.
 //
+// The latest compaction entry on that path is returned with the messages.
+// firstKeptEntryId selects the first message the next request sends. The
+// messages themselves stay in the slice. A compaction that is not on the
+// leaf path is ignored. If that id is missing, the kept tail is whatever
+// survived after the compaction entry.
+//
 // A file with no parentId links is Pi's version 1 shape: file order is the path.
-func transcriptFrom(entries []sessionEntry) ([]ai.Message, string, error) {
+func transcriptFrom(entries []sessionEntry) ([]ai.Message, []string, *agent.Compaction, string, error) {
 	if len(entries) == 0 {
-		return nil, "", nil
+		return nil, nil, nil, "", nil
 	}
 	byID := make(map[string]sessionEntry, len(entries))
 	linked := false
 	for _, entry := range entries {
 		if entry.ID == "" {
-			return nil, "", fmt.Errorf("entry is missing an id")
+			return nil, nil, nil, "", fmt.Errorf("entry is missing an id")
 		}
 		if _, ok := byID[entry.ID]; ok {
-			return nil, "", fmt.Errorf("duplicate entry %s", entry.ID)
+			return nil, nil, nil, "", fmt.Errorf("duplicate entry %s", entry.ID)
 		}
 		byID[entry.ID] = entry
 		if entry.ParentID != nil && *entry.ParentID != "" {
@@ -173,24 +190,95 @@ func transcriptFrom(entries []sessionEntry) ([]ai.Message, string, error) {
 		var err error
 		ordered, err = walkLeaf(byID, leaf)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, nil, "", err
 		}
 	}
 	msgs := make([]ai.Message, 0, len(ordered))
+	ids := make([]string, 0, len(ordered))
 	for _, entry := range ordered {
 		if entry.Type != "message" {
 			continue
 		}
 		msg, skip, err := decodeMessage(entry.Message)
 		if err != nil {
-			return nil, "", fmt.Errorf("entry %s: %w", entry.ID, err)
+			return nil, nil, nil, "", fmt.Errorf("entry %s: %w", entry.ID, err)
 		}
 		if skip {
 			continue
 		}
 		msgs = append(msgs, msg)
+		ids = append(ids, entry.ID)
 	}
-	return modelTranscript(msgs), leaf, nil
+	msgs, ids = modelTranscript(msgs, ids)
+	return msgs, ids, projectCompaction(ordered, ids), leaf, nil
+}
+
+// projectCompaction turns the latest summary on the leaf into the cut the
+// agent applies. The index is into the messages that survived load, which
+// can drop a torn tool pair the file still holds.
+func projectCompaction(ordered []sessionEntry, ids []string) *agent.Compaction {
+	var entry *sessionEntry
+	for i := len(ordered) - 1; i >= 0; i-- {
+		if ordered[i].Type != "compaction" || strings.TrimSpace(ordered[i].Summary) == "" {
+			continue
+		}
+		found := ordered[i]
+		entry = &found
+		break
+	}
+	if entry == nil {
+		return nil
+	}
+	indexOf := make(map[string]int, len(ids))
+	for i, id := range ids {
+		if id != "" {
+			indexOf[id] = i
+		}
+	}
+	from, kept := keptIndex(ordered, entry, indexOf, len(ids))
+	c := &agent.Compaction{
+		ID:           entry.ID,
+		Summary:      strings.TrimSpace(entry.Summary),
+		FirstKeptID:  kept,
+		From:         from,
+		TokensBefore: entry.TokensBefore,
+	}
+	if entry.Details != nil {
+		c.ReadFiles = append([]string(nil), entry.Details.ReadFiles...)
+		c.ModifiedFiles = append([]string(nil), entry.Details.ModifiedFiles...)
+	}
+	return c
+}
+
+func keptIndex(ordered []sessionEntry, compact *sessionEntry, indexOf map[string]int, n int) (int, string) {
+	if id := compact.FirstKeptEntryID; id != "" {
+		if i, ok := indexOf[id]; ok {
+			return i, id
+		}
+		if i, id, ok := nextSurviving(ordered, id, indexOf); ok {
+			return i, id
+		}
+	}
+	if i, id, ok := nextSurviving(ordered, compact.ID, indexOf); ok {
+		return i, id
+	}
+	return n, ""
+}
+
+func nextSurviving(ordered []sessionEntry, afterID string, indexOf map[string]int) (int, string, bool) {
+	seen := false
+	for _, entry := range ordered {
+		if !seen {
+			if entry.ID == afterID {
+				seen = true
+			}
+			continue
+		}
+		if i, ok := indexOf[entry.ID]; ok {
+			return i, entry.ID, true
+		}
+	}
+	return 0, "", false
 }
 
 func walkLeaf(byID map[string]sessionEntry, leaf string) ([]sessionEntry, error) {
@@ -224,8 +312,9 @@ func walkLeaf(byID map[string]sessionEntry, leaf string) ([]sessionEntry, error)
 // modelTranscript drops tool calls that have no stored result, and tool
 // results that have no call. A crash can leave the pair unfinished. Sending
 // that pair would make the next request invalid. The file is not rewritten.
-func modelTranscript(msgs []ai.Message) []ai.Message {
+func modelTranscript(msgs []ai.Message, ids []string) ([]ai.Message, []string) {
 	out := make([]ai.Message, 0, len(msgs))
+	outIDs := make([]string, 0, len(msgs))
 	seenResult := map[string]bool{}
 	for i, msg := range msgs {
 		switch msg.Role {
@@ -234,6 +323,7 @@ func modelTranscript(msgs []ai.Message) []ai.Message {
 				continue
 			}
 			out = append(out, msg)
+			outIDs = append(outIDs, ids[i])
 		case ai.RoleAssistant:
 			msg.ToolCalls = keptCalls(msgs, i, msg.ToolCalls)
 			if len(msg.ToolCalls) == 0 && strings.TrimSpace(msg.Text) == "" {
@@ -243,6 +333,7 @@ func modelTranscript(msgs []ai.Message) []ai.Message {
 				msg.StopReason = ai.StopStop
 			}
 			out = append(out, msg)
+			outIDs = append(outIDs, ids[i])
 		case ai.RoleToolResult:
 			if msg.ToolCallID == "" || seenResult[msg.ToolCallID] {
 				continue
@@ -252,9 +343,10 @@ func modelTranscript(msgs []ai.Message) []ai.Message {
 			}
 			seenResult[msg.ToolCallID] = true
 			out = append(out, msg)
+			outIDs = append(outIDs, ids[i])
 		}
 	}
-	return out
+	return out, outIDs
 }
 
 func keptCalls(msgs []ai.Message, index int, calls []ai.ToolCall) []ai.ToolCall {

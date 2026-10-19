@@ -103,7 +103,7 @@ flowchart LR
 {"type":"message","id":"b2c3d4e5","parentId":"a1b2c3d4","timestamp":"2026-10-19T17:40:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"hi"}],"model":"gpt-5.6-luna","stopReason":"stop","timestamp":1760895602000}}
 ```
 
-版本 3 是 Pi 当前的文件头。助手的文本和工具调用使用 Pi 的内容块（`text`、`toolCall`）。工具结果的角色是 `toolResult`。内存里的消息仍然是平坦的。这一层转换只出现在文件边上。系统提示不写入文件。文件里如果有 `system` 消息，读取时会跳过，请求构造时再附上当前的提示。`message` 以外的条目也会跳过，包括 `usage`、`label` 和 `compaction`。压缩不会被应用，所以带有摘要的文件仍然会把叶子路径上的消息送出去。没有 `parentId` 的版本 1 文件按行序读取。
+版本 3 是 Pi 当前的文件头。助手的文本和工具调用使用 Pi 的内容块（`text`、`toolCall`）。工具结果的角色是 `toolResult`。内存里的消息仍然是平坦的。这一层转换只出现在文件边上。系统提示不写入文件。文件里如果有 `system` 消息，读取时会跳过，请求构造时再附上当前的提示。`message` 以外的条目不会变成会话记录里的一行，包括 `usage` 和 `label`。叶子上的 `compaction` 条目会生效，见[上下文压缩](#上下文压缩)。没有 `parentId` 的版本 1 文件按行序读取。
 
 没有对应结果的工具调用会在读取时丢掉，没有对应调用的工具结果也一样。文件不会被改写。工具对被写坏时，下一次请求仍然合法。
 
@@ -114,13 +114,13 @@ flowchart LR
 | `--no-session` | 会话记录只留在内存里。不读也不写。 |
 | `--session-dir` | 会话根目录。覆盖 `PIGO_SESSION_DIR` 和 `session_dir`。 |
 
-`-c`、`--session` 和 `--no-session` 不能一起用。聊天和 `-p` 都可以恢复。文件里已经有消息时，`-p` 和逐行会话会打印 `resumed <id> (N messages)`。聊天在第一次提示之前把这些消息画进对话区。发给模型的是当前系统提示、叶子路径，然后是新的用户消息。恢复时用的是你这次启动的模型。助手行里记下的是写出那条消息的模型。
+`-c`、`--session` 和 `--no-session` 不能一起用。聊天和 `-p` 都可以恢复。文件里已经有消息时，`-p` 和逐行会话会打印 `resumed <id> (N messages)`。聊天在第一次提示之前把这些消息画进对话区。发给模型的是当前系统提示、叶子路径，然后是新的用户消息。叶子上有压缩条目时，这条路径换成摘要，加上从 `firstKeptEntryId` 往后的消息。存下来的消息仍然是整条叶子。恢复时用的是你这次启动的模型。助手行里记下的是写出那条消息的模型。
 
 `/reset` 清掉当前的会话记录和内存里的 token 合计，画面上打一条分隔。分隔线上面的文字还在。原来的文件也还在。已经有文件时，逐行会话会打印 `previous session <id>`。下一条提示才会新建文件。reset 之后如果没有新的提示，`--continue` 仍会打开原来的文件，因为新文件还不存在。token 计数不在文件里。恢复或 reset 之后，要等提供方再次报告用量，合计才重新开始。
 
 删掉一个会话，就是删掉它的 `.jsonl` 文件。
 
-会话选择器、显示名、分支、分叉、压缩和上下文编辑都不在这一版里。叶子遍历留在这里，是因为带有旁支的文件仍然必须载入下一次请求要发送的那条路径。
+会话选择器、显示名、分支、分叉和上下文编辑都不在这一版里。叶子遍历留在这里，是因为带有旁支的文件仍然必须载入下一次请求要发送的那条路径。这条路径上的压缩条目会生效；旁支上的摘要不会。
 
 | 题目 | 选择 | 另一条路 | 原因 |
 | --- | --- | --- | --- |
@@ -129,6 +129,38 @@ flowchart LR
 | 提示 | 每次请求重新构造 | 存下 Pi 的系统消息 | 代理本来就不把提示放进会话记录。两次运行之间技能可能变了 |
 | 用量 | 留在内存 | 写入 Pi 的 usage 条目 | 用量已经显示在这一次进程里。恢复后合计从头算 |
 | `/reset` | 新文件，旧文件保留 | 截断当前文件 | 只追加才和这个格式一致。旧对话可以用 `--session` 打开 |
+| 压缩 | 追加一条摘要叶子 | 把文件改写成只剩尾巴 | 原始消息还在。恢复时发送摘要和保留的尾巴 |
+
+## 上下文压缩
+
+估计的上下文大于 `context_window - reserve_tokens` 时自动压缩。`/compact` 随时做同样的事，后面可以跟一句侧重点（`/compact The Parser`）。摘要在下一次模型调用里是一条用户消息。它不写进会话记录，也不会画成助手的回复。
+
+估计优先用上一次聊天调用的提供方用量，再加上那次调用之后新消息的字符数，大约四个字符一个 token。没有用量时，同样的字符估计覆盖系统提示和下一次调用会发送的消息。工具的 schema 算在预留里。摘要调用的用量会计入本次会话合计，但不会成为新的锚点，因为它量的是摘要提示，不是聊天上下文。压缩会清掉锚点，因为旧的计数包含下一次请求不再发送的消息。
+
+切分从末尾往回走，直到 `keep_recent_tokens`，并落在一条用户或助手消息上。工具结果和产生它的调用留在一起。尾巴已经放得下时，自动压缩不改变这次请求。这时 `/compact` 会报告 `nothing to compact`。`keep_recent_tokens` 应小于 `context_window - reserve_tokens`。没有模型目录，所以窗口是一项设置。默认打开压缩，窗口 128000，预留 16384，原样保留最近 20000 个 token。估计刚好等于这条线时不压缩。
+
+摘要请求走同一条流，不带工具。提示要求写出 Pi 的这几节：Goal、Constraints & Preferences、Progress、Key Decisions、Next Steps、Critical Context。下一次压缩是更新上一次摘要，而不是从头重写。`read_file` 的路径列在 `<read-files>` 下，`write_file` 和 `edit_file` 的路径列在 `<modified-files>` 下。失败时上下文保持原样。自动压缩会因此结束这一轮。`/compact` 把错误返回来。Esc 取消这次摘要调用。
+
+会话文件打开时，摘要再追加一行，并成为叶子。`firstKeptEntryId` 是仍然原样发送的第一条消息的文件 id。被它替换的消息留在文件里。下一条消息的 `parentId` 是这条压缩的 id。读取时沿着叶子走，幸存的消息都留在会话记录里，发送的是摘要加上从那个 id 往后的消息，包括写在这条压缩之后的消息。如果找不到那个 id，保留的尾巴就是压缩条目之后还在的消息。`/reset` 丢掉内存里的摘要，并开始一个新文件。
+
+文件改动确认不变。压缩发生在模型调用之前。`write_file` 和 `edit_file` 仍然经过 `BeforeToolCall`。
+
+```mermaid
+flowchart LR
+  estimate["估计上下文"]
+  cut["保留最近的尾巴"]
+  summary["一次摘要调用"]
+  leaf["追加压缩叶子"]
+  next["下一次请求：摘要加上尾巴"]
+  estimate --> cut --> summary --> leaf --> next
+```
+
+| 题目 | 选择 | 另一条路 | 原因 |
+| --- | --- | --- | --- |
+| 触发 | 估计超过预留，或 `/compact` | 每一轮都压缩 | 预算真正变紧之前，最近的窗口仍原样保留 |
+| 切分 | 一次摘要，工具对留在一起 | 一轮被切开时做两次摘要 | 一次调用就读得完。被切开的一轮整段摘要 |
+| 文件 | 追加摘要，留下原始行 | 把文件改写成只剩尾巴 | 恢复时仍能看到旧消息。叶子遍历选中摘要 |
+| 留出 | 分支摘要、溢出重试、扩展、计价 | 再做一个压缩代理 | 那些需要树界面或模型目录，这棵目录里没有 |
 
 ## 危险命令
 
@@ -177,7 +209,7 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过这次检查和[文件改动确认](#文件改动确认)。聊天画面和行会话共用一张命令表：`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。
+Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过这次检查和[文件改动确认](#文件改动确认)。聊天画面和行会话共用一张命令表：`/compact`、`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。`/compact` 和 `/reset` 一样，要等这一轮结束。
 
 这是一张模式拒绝表。脚本、编码、别名、`git -C`、`(rm -rf /)` 或 `$(…)` 这样的子 shell，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
 
@@ -217,7 +249,7 @@ Enter 或 `y` 写入。Esc 或 `n` 不写。工具结果是 `blocked: file chang
 
 只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。`.env` 和技能前言各自去掉一对引号。`.env` 只填补进程里还没有的变量，给 shell 工具用，不会覆盖已经设置的变量。进程环境在 `.env` 之后再写入，所以进程里的值仍然胜过 `.env`。
 
-从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`、`PIGO_SESSION_DIR`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过文件改动确认和危险命令检查，`-c` / `--session` 恢复一个会话文件。`--no-session` 让这一次只留在内存里。
+从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`、`PIGO_SESSION_DIR`、`PIGO_COMPACT`、`PIGO_CONTEXT_WINDOW`、`PIGO_RESERVE_TOKENS`、`PIGO_KEEP_RECENT_TOKENS`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过文件改动确认和危险命令检查，`-c` / `--session` 恢复一个会话文件。`--no-session` 让这一次只留在内存里。`compact`、`context_window`、`reserve_tokens` 和 `keep_recent_tokens` 设置[上下文压缩](#上下文压缩)的预算。它们没有命令行参数。`PIGO_COMPACT` 为 `1` 或 `true` 时打开自动压缩，为 `0` 或 `false` 时关闭。自动压缩关闭时，手动的 `/compact` 仍然可以跑。
 
 一次聊天请求只发送 `model`、`messages`、`tools` 和 `stream`。它不发送 `max_tokens`、`temperature` 或 `top_p`。GPT-5 推理模型会拒绝这些字段；不发送它们，其他兼容 OpenAI 的提供者也继续用自己的默认值。
 
@@ -265,4 +297,4 @@ Pi 还会遵守忽略文件、上层目录的 `.agents/skills`，以及包里的
 
 ## 留出的部分
 
-完整的 Pi TUI、各家厂商的原生 API、技能市场、会话分支、会话选择器、压缩、子代理，以及遥测。这棵目录要说明的是分层：传输、循环、编码产品。
+完整的 Pi TUI、各家厂商的原生 API、技能市场、会话分支、会话选择器、分支摘要、溢出重试、子代理，以及遥测。这棵目录要说明的是分层：传输、循环、编码产品。

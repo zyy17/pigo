@@ -32,6 +32,8 @@ type Config struct {
 	SessionDir string
 	// Resume is empty for a new session, ResumeLatest, or a path, id, or unique prefix.
 	Resume string
+	// Compact is the context budget. A zero window uses the agent defaults.
+	Compact agent.CompactSettings
 }
 
 // Confirm is one question shown before a tool runs.
@@ -78,6 +80,7 @@ func New(cfg Config) (*Session, error) {
 	}
 	var prior []ai.Message
 	var record func(ai.Message) error
+	var afterCompact func(*agent.Compaction) error
 	if strings.TrimSpace(cfg.SessionDir) != "" {
 		j, msgs, err := openJournal(cfg.SessionDir, ws.Root(), cfg.Resume)
 		if err != nil {
@@ -91,6 +94,12 @@ func New(cfg Config) (*Session, error) {
 			}
 			return session.journal.append(msg, session.model)
 		}
+		afterCompact = func(c *agent.Compaction) error {
+			if session.journal == nil {
+				return nil
+			}
+			return session.journal.appendCompaction(c)
+		}
 	}
 	ag, err := agent.New(agent.Config{
 		SystemPrompt: buildSystemPrompt(ws.Root(), found),
@@ -100,13 +109,15 @@ func New(cfg Config) (*Session, error) {
 		MaxTurns:     cfg.MaxTurns,
 		Before:       session.beforeTool,
 		Record:       record,
+		AfterCompact: afterCompact,
+		Compact:      cfg.Compact,
 	})
 	if err != nil {
 		session.closeJournal()
 		return nil, err
 	}
-	if len(prior) > 0 {
-		ag.SetMessages(prior)
+	if session.journal != nil && (len(prior) > 0 || session.journal.compact != nil) {
+		ag.Restore(prior, session.journal.msgIDs, session.journal.compact)
 	}
 	session.agent = ag
 	return session, nil
@@ -255,6 +266,14 @@ func (s *Session) Reset() error {
 	}
 	s.journal = next
 	return nil
+}
+
+// Compact summarizes older messages and keeps the recent window.
+// The next Prompt sends that summary plus the tail. instructions focus
+// the summary. An error leaves the context unchanged. When a session file
+// is open, the summary is appended and becomes the leaf.
+func (s *Session) Compact(ctx context.Context, instructions string) error {
+	return s.agent.Compact(ctx, instructions)
 }
 
 // Abort cancels the running prompt.

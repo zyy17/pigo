@@ -22,6 +22,11 @@ func render(w io.Writer, ev agent.Event) {
 		if line := usageLine(ev.Usage, ev.Session); line != "" {
 			fmt.Fprintln(w, line)
 		}
+	case agent.Compacted:
+		fmt.Fprintln(w, "compacted")
+		if line := usageLine(ev.Usage, ev.Session); line != "" {
+			fmt.Fprintln(w, line)
+		}
 	case agent.ToolStart:
 		fmt.Fprintf(w, "→ %s %s\n", ev.ToolName, flattenLine(string(ev.Args), toolArgCols))
 	case agent.ToolEnd:
