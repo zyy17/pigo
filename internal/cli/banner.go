@@ -1,4 +1,5 @@
 // Opening banner: the wordmark, the session card, and the hint line.
+
 package cli
 
 import (

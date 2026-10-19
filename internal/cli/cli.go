@@ -1,4 +1,3 @@
-// Package cli is the terminal session for the coding agent.
 package cli
 
 import (

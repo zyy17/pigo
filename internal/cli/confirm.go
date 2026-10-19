@@ -3,6 +3,7 @@
 // A dangerous shell command replaces the working row until the user
 // answers. Enter or y allows it. Esc or n denies it. Esc does not
 // interrupt the turn; Ctrl-C still does, and denies on the way out.
+
 package cli
 
 import (

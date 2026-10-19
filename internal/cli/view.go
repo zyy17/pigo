@@ -4,6 +4,7 @@
 // or confirm row, the slash menu, the composer, and the status bar. View
 // declares the alternate screen and asks Bubble Tea to park the hardware
 // cursor on the composer cell.
+
 package cli
 
 import (

@@ -5,6 +5,7 @@
 // keyboard protocol and xterm modifyOtherKeys) and turns it off on quit.
 // Ctrl+J, Alt+Enter, and a trailing backslash still insert a newline on
 // terminals that report Shift+Enter as a plain Enter.
+
 package cli
 
 import (
