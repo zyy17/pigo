@@ -180,27 +180,40 @@ func toolChunk(calls []Call, finish bool) map[string]any {
 	return map[string]any{"choices": []any{choice}}
 }
 
+// These types only decode a recorded request. Each one is one JSON object.
+type rawRequest struct {
+	Model    string       `json:"model"`
+	Messages []rawMessage `json:"messages"`
+	Tools    []rawTool    `json:"tools"`
+}
+
+type rawMessage struct {
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCallID string          `json:"tool_call_id"`
+	ToolCalls  []rawToolCall   `json:"tool_calls"`
+}
+
+type rawToolCall struct {
+	ID       string      `json:"id"`
+	Function rawFunction `json:"function"`
+}
+
+type rawFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type rawTool struct {
+	Function rawToolSpec `json:"function"`
+}
+
+type rawToolSpec struct {
+	Name string `json:"name"`
+}
+
 func decodeRequest(body []byte) Request {
-	var raw struct {
-		Model    string `json:"model"`
-		Messages []struct {
-			Role       string          `json:"role"`
-			Content    json.RawMessage `json:"content"`
-			ToolCallID string          `json:"tool_call_id"`
-			ToolCalls  []struct {
-				ID       string `json:"id"`
-				Function struct {
-					Name      string `json:"name"`
-					Arguments string `json:"arguments"`
-				} `json:"function"`
-			} `json:"tool_calls"`
-		} `json:"messages"`
-		Tools []struct {
-			Function struct {
-				Name string `json:"name"`
-			} `json:"function"`
-		} `json:"tools"`
-	}
+	var raw rawRequest
 	_ = json.Unmarshal(body, &raw)
 	out := Request{Model: raw.Model}
 	for _, msg := range raw.Messages {
