@@ -111,7 +111,7 @@ make build
 
 A terminal opens the chat on the alternate screen. The keys are in [docs/tui.md](docs/tui.md).
 
-- Enter sends. Esc or Ctrl-C cancels the turn.
+- Enter sends. Esc or Ctrl-C cancels the turn. While a turn runs the composer stays editable, and Enter queues one follow-up message (Esc interrupts).
 - A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check.
 - `/skill:name` loads a skill, `/reset` clears the transcript, and `/exit` quits.
 - Quitting leaves the alternate screen. A pipe uses the line session and does not change the screen.

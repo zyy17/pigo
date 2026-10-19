@@ -111,7 +111,7 @@ make build
 
 终端在备用屏幕上打开聊天。按键见 [docs/tui.zh-CN.md](docs/tui.zh-CN.md)。
 
-- Enter 发送。Esc 或 Ctrl-C 取消这一轮。
+- Enter 发送。Esc 或 Ctrl-C 取消这一轮。这一轮进行中输入条仍可编辑，Enter 会排成一条后续消息（Esc 打断）。
 - 拒绝表上的 shell 命令会先询问。Enter 或 `y` 允许，Esc 或 `n` 拒绝。`-p` 和逐行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 跳过检查。
 - `/skill:name` 装入技能，`/reset` 清空会话，`/exit` 退出。
 - 退出会离开备用屏幕。管道走逐行会话，不改屏幕。
