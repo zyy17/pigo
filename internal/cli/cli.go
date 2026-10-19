@@ -16,7 +16,12 @@ import (
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
 	"github.com/zyy17/pigo/internal/config"
-	"github.com/zyy17/pigo/internal/defaults"
+)
+
+// A pasted task can be longer than the scanner's default 64KiB token.
+const (
+	replLineStart = 64 * 1024
+	replLineMax   = 1024 * 1024
 )
 
 const version = "0.1.0"
@@ -180,8 +185,7 @@ func (a *app) repl() error {
 	fmt.Fprintf(a.out, "pigo  workspace %s  model %s\n", a.session.Root(), a.session.Model())
 	fmt.Fprintln(a.out, "Enter a task. "+hintText())
 	sc := bufio.NewScanner(a.in)
-	// The default token limit is 64KiB, which rejects a long pasted task.
-	sc.Buffer(make([]byte, 0, defaults.LineStart), defaults.LineMax)
+	sc.Buffer(make([]byte, 0, replLineStart), replLineMax)
 	for {
 		fmt.Fprint(a.out, "you> ")
 		if !sc.Scan() {

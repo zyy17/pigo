@@ -262,6 +262,7 @@ func TestChatRunsAWrite(t *testing.T) {
 	session, err := coding.New(coding.Config{
 		Workspace: dir,
 		APIKey:    "test",
+		Model:     "test-model",
 		Stream: func(ctx context.Context, req ai.Request) (<-chan ai.Event, error) {
 			step++
 			n := step

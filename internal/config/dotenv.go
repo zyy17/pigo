@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/knadh/koanf/v2"
-
-	builtin "github.com/zyy17/pigo/internal/defaults"
 )
 
 func loadDotEnv(k *koanf.Koanf, path string) error {
@@ -64,7 +62,6 @@ func readDotEnv(path string) (map[string]string, error) {
 
 	out := map[string]string{}
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, builtin.LineStart), builtin.LineMax)
 	for sc.Scan() {
 		key, val, ok := parseEnvLine(sc.Text())
 		if ok {

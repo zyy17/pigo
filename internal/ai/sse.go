@@ -6,8 +6,12 @@ import (
 	"errors"
 	"io"
 	"strings"
+)
 
-	"github.com/zyy17/pigo/internal/defaults"
+// A single SSE data line can hold a whole tool-call argument.
+const (
+	sseLineStart = 64 * 1024
+	sseLineMax   = 1024 * 1024
 )
 
 // parseSSE reads a chat-completions event stream and sends ai events.
@@ -15,7 +19,7 @@ import (
 func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 	acc := &accumulator{}
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, defaults.LineStart), defaults.LineMax)
+	sc.Buffer(make([]byte, 0, sseLineStart), sseLineMax)
 	for sc.Scan() {
 		if err := ctx.Err(); err != nil {
 			sendStreamError(out, err, acc.message())
