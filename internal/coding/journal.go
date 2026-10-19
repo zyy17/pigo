@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -109,9 +110,29 @@ func newJournal(root, cwd string) (*journal, error) {
 		dir:     root,
 		cwd:     cwd,
 		id:      id,
-		started: time.Now().UTC(),
+		started: nextStamp(),
 		ids:     map[string]struct{}{},
 	}, nil
+}
+
+// lastStamp is the last session start time this process handed out.
+// The header and the file name keep only milliseconds. Continue uses that
+// stamp when two files share a modification time, so a second session in
+// the same millisecond has to sort after the first.
+var (
+	stampMu   sync.Mutex
+	lastStamp time.Time
+)
+
+func nextStamp() time.Time {
+	stampMu.Lock()
+	defer stampMu.Unlock()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	if !now.After(lastStamp) {
+		now = lastStamp.Add(time.Millisecond)
+	}
+	lastStamp = now
+	return now
 }
 
 func (j *journal) close() {
@@ -375,6 +396,7 @@ func newestSession(dir string) (string, error) {
 	}
 	var best string
 	var bestTime time.Time
+	var bestStamp string
 	for _, ent := range entries {
 		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".jsonl") {
 			continue
@@ -382,7 +404,8 @@ func newestSession(dir string) (string, error) {
 		path := filepath.Join(dir, ent.Name())
 		// Header only. Continue loads this file next, so a bad line in it
 		// is reported there.
-		if _, err := readHeader(path); err != nil {
+		header, err := readHeader(path)
+		if err != nil {
 			continue
 		}
 		info, err := ent.Info()
@@ -390,12 +413,30 @@ func newestSession(dir string) (string, error) {
 			continue
 		}
 		mt := info.ModTime()
-		if best == "" || mt.After(bestTime) || (mt.Equal(bestTime) && path > best) {
+		if laterSession(best, bestTime, bestStamp, path, mt, header.Timestamp) {
 			best = path
 			bestTime = mt
+			bestStamp = header.Timestamp
 		}
 	}
 	return best, nil
+}
+
+// laterSession reports that path is a better continue target than best.
+// A newer modification time wins. Equal times use the header stamp, which
+// is the session start. The path is only the last resort, so two sessions
+// started in one tick do not resume whichever id sorts higher.
+func laterSession(best string, bestTime time.Time, bestStamp, path string, mt time.Time, stamp string) bool {
+	if best == "" || mt.After(bestTime) {
+		return true
+	}
+	if mt.Before(bestTime) {
+		return false
+	}
+	if stamp != bestStamp {
+		return stamp > bestStamp
+	}
+	return path > best
 }
 
 func resolveSession(root, cwd, spec string) (string, error) {
