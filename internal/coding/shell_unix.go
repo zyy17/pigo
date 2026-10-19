@@ -3,11 +3,11 @@
 package coding
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 )
 
 // configureShell puts the shell in its own process group and kills that
@@ -15,7 +15,7 @@ import (
 // keeps the output pipe open and the tool waits for the child.
 func configureShell(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.WaitDelay = 500 * time.Millisecond
+	cmd.WaitDelay = shellWaitDelay
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return nil
@@ -26,4 +26,12 @@ func configureShell(cmd *exec.Cmd) {
 		}
 		return err
 	}
+}
+
+// newShellCommand runs command in sh. configureShell kills the process
+// group, because a child can keep stdout open after sh exits.
+func newShellCommand(ctx context.Context, command string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	configureShell(cmd)
+	return cmd
 }

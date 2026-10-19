@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -19,30 +19,18 @@ type listArgs struct {
 }
 
 func listTool(ws *Workspace) agent.Tool {
-	return agent.Tool{
-		Name:        "list_dir",
-		Label:       "list_dir",
-		Description: "List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries.",
-		Parameters: ai.ObjectSchema(map[string]ai.Property{
+	return newTool("list_dir",
+		"List directory contents. Returns entries sorted alphabetically, with '/' suffix for directories. Includes dotfiles. Output is truncated to 500 entries.",
+		ai.ObjectSchema(map[string]ai.Property{
 			"path": ai.StringProperty("Directory to list (default: current directory)"),
 		}),
-		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args listArgs
-			if len(strings.TrimSpace(string(raw))) == 0 {
-				raw = []byte("{}")
-			}
-			if err := decodeArgs(raw, &args); err != nil {
-				return "", err
-			}
-			return listDir(ctx, ws, args.Path)
+		func(_ context.Context, args listArgs) (string, error) {
+			return listDir(ws, args.Path)
 		},
-	}
+	)
 }
 
-func listDir(ctx context.Context, ws *Workspace, path string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
+func listDir(ws *Workspace, path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		path = "."
 	}
@@ -67,8 +55,8 @@ func listDir(ctx context.Context, ws *Workspace, path string) (string, error) {
 	if len(entries) == 0 {
 		return "(empty directory)", nil
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+	slices.SortFunc(entries, func(a, b os.DirEntry) int {
+		return strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 	})
 	shown := entries
 	clipped := false

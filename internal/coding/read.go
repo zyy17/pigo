@@ -2,7 +2,6 @@ package coding
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,27 +17,18 @@ type readArgs struct {
 }
 
 func readTool(ws *Workspace, skillDirs []string) agent.Tool {
-	return agent.Tool{
-		Name:        "read_file",
-		Label:       "read_file",
-		Description: "Read the contents of a text file. Output is truncated. Lines are numbered. path is inside the workspace or a discovered skill directory.",
-		Parameters: ai.ObjectSchema(map[string]ai.Property{
+	return newTool("read_file",
+		"Read the contents of a text file. Output is truncated. Lines are numbered. path is inside the workspace or a discovered skill directory.",
+		ai.ObjectSchema(map[string]ai.Property{
 			"path": ai.StringProperty("Path to the file to read (relative or absolute)"),
 		}, "path"),
-		Execute: func(ctx context.Context, raw []byte) (string, error) {
-			var args readArgs
-			if err := decodeArgs(raw, &args); err != nil {
-				return "", err
-			}
-			return readFile(ctx, ws, skillDirs, args.Path)
+		func(_ context.Context, args readArgs) (string, error) {
+			return readFile(ws, skillDirs, args.Path)
 		},
-	}
+	)
 }
 
-func readFile(ctx context.Context, ws *Workspace, skillDirs []string, path string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
+func readFile(ws *Workspace, skillDirs []string, path string) (string, error) {
 	if err := requirePath(path); err != nil {
 		return "", err
 	}
@@ -46,15 +36,8 @@ func readFile(ctx context.Context, ws *Workspace, skillDirs []string, path strin
 	if err != nil {
 		return "", err
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", missingPath(path)
-		}
+	if _, err := statFile(path, abs); err != nil {
 		return "", err
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("%s is a directory", path)
 	}
 
 	f, err := os.Open(abs)

@@ -36,17 +36,16 @@ func parseFrontmatter(text string) (map[string]string, bool) {
 		if !ok {
 			continue
 		}
-		meta[strings.TrimSpace(key)] = trimScalar(strings.TrimSpace(value))
+		meta[strings.TrimSpace(key)] = Unquote(strings.TrimSpace(value))
 	}
 	return meta, true
 }
 
-func trimScalar(value string) string {
+// Unquote drops one matching pair of single or double quotes.
+func Unquote(value string) string {
 	if len(value) >= 2 {
-		if value[0] == '"' && value[len(value)-1] == '"' {
-			return value[1 : len(value)-1]
-		}
-		if value[0] == '\'' && value[len(value)-1] == '\'' {
+		quote := value[0]
+		if (quote == '"' || quote == '\'') && value[len(value)-1] == quote {
 			return value[1 : len(value)-1]
 		}
 	}
