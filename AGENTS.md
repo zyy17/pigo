@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Rules for humans and coding agents working on pigo. Prefer this file over history when they disagree. Project design and usage live in [README.md](README.md) and [docs/design.md](docs/design.md); do not paste chat logs into the docs.
+Rules for humans and coding agents working on pigo. Prefer this file over history when they disagree. Project design and usage live in [README.md](README.md), [docs/design.md](docs/design.md), and [docs/tui.md](docs/tui.md); do not paste chat logs into the docs.
 
 ## What this project is
 
