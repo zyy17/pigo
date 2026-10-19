@@ -37,12 +37,10 @@ func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ask != nil {
 		return m.answerConfirm(msg)
 	}
-	if m.busy {
-		// Esc stops the turn. The working row is the hint for that key.
-		// A confirm prompt owns Esc first and uses it to deny.
-		if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) {
-			m.session.Abort()
-		}
+	// Esc stops a running turn even when the slash menu is open.
+	// The menu uses Esc only while idle. A confirm prompt owns Esc first.
+	if m.busy && msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) {
+		m.session.Abort()
 		return nil
 	}
 	// Esc returns a paused transcript to the tail. The slash menu owns
@@ -151,7 +149,11 @@ func (m *chatModel) onEnter() tea.Cmd {
 		m.noteTyped()
 		return nil
 	}
-	return m.submit(strings.TrimSpace(m.comp.text()))
+	text := strings.TrimSpace(m.comp.text())
+	if m.busy {
+		return m.queueText(text)
+	}
+	return m.submit(text)
 }
 
 // continuedLine is the fallback for a terminal that cannot report
