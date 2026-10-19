@@ -105,7 +105,7 @@ make build
 
 终端在备用屏幕上打开聊天。pigo 字标、会话卡片和各回合都画在这块屏幕里。PgUp 和 PgDn 按页滚动对话，两页之间留一行重叠，鼠标滚轮一次滚动一行。没有任务在跑时，Esc 回到最新一行。输入条和页脚固定在底部。新输出会贴在底部，直到你往上翻。长行（包括中文）按终端宽度折行，窗口大小变化时会按原文重新折行。
 
-Enter 发送。输入框会立刻清空，这条消息进入对话区，输入条上方出现一行状态：转圈、已用时间，以及 `esc to interrupt`，直到这一轮结束。终端能区分时，Shift+Enter 换行。pigo 启动时请求 xterm 的 modifyOtherKeys，也识别 kitty 的 Shift+Enter 序列。Ctrl+J、Alt+Enter，以及行末一个 `\` 再按 Enter，在任何终端都能换行。Terminal.app，以及没有打开扩展按键的 tmux，需要用这几种方式。Esc 或 Ctrl-C 取消正在进行的任务。拒绝表上的 shell 命令会在执行前停住：工作行变成 `! allow this command?`，Enter 或 `y` 允许，Esc 或 `n` 拒绝。模型接着看到一条 `blocked:` 工具结果，这一轮继续。`-p` 和行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 在可信环境里跳过检查。这张表防的是模型失手。脚本、别名或 `env rm` 都能绕过。它不是沙箱。助手正文是淡暖黄（`#E8D9A8`）。行内代码、标题和链接是 Go 青，diff 新增是绿色，删除是红色，工具输出预览是暗色。`Ran` 那一行是粗体。`/skill:name` 装入技能，`/reset` 清空会话并打印一行分隔，`/exit` 退出。输入框为空时，Ctrl-D 也退出。退出会离开备用屏幕，终端回到 pigo 启动之前的样子。对话不会留在 shell 的回滚区里。管道和逐行会话不会动屏幕。
+Enter 发送。输入框会立刻清空，这条消息进入对话区，输入条上方出现一行状态：转圈、已用时间，以及 `esc to interrupt`，直到这一轮结束。终端光标停在输入条上，输入法的候选窗会跟着插入点走。终端能区分 Enter 和 Shift+Enter 时，Shift+Enter 换行。Bubble Tea 会请求这种按键消歧义（Kitty 协议和 xterm 的 modifyOtherKeys），退出时再关掉。Ctrl+J、Alt+Enter，以及行末一个 `\` 再按 Enter，在任何终端都能换行。Shift+Enter 被当成普通 Enter 时，用这几种方式。Esc 或 Ctrl-C 取消正在进行的任务。拒绝表上的 shell 命令会在执行前停住：工作行变成 `! allow this command?`，Enter 或 `y` 允许，Esc 或 `n` 拒绝。模型接着看到一条 `blocked:` 工具结果，这一轮继续。`-p` 和行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 在可信环境里跳过检查。这张表防的是模型失手。脚本、别名或 `env rm` 都能绕过。它不是沙箱。助手正文是淡暖黄（`#E8D9A8`）。行内代码、标题和链接是 Go 青，diff 新增是绿色，删除是红色，工具输出预览是暗色。`Ran` 那一行是粗体。`/skill:name` 装入技能，`/reset` 清空会话并打印一行分隔，`/exit` 退出。输入框为空时，Ctrl-D 也退出。退出会离开备用屏幕，终端回到 pigo 启动之前的样子。对话不会留在 shell 的回滚区里。管道和逐行会话不会动屏幕。
 
 标准输入不是终端时，同样的命令走逐行会话。管道和测试用的就是这条路径。
 

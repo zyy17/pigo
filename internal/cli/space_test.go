@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestWordmarkProportions(t *testing.T) {
@@ -72,8 +70,6 @@ func TestSessionCardAndCellGaps(t *testing.T) {
 		t.Fatalf("wide rule is %d cols", w)
 	}
 
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.ColorProfile()) })
 	user := m.renderBlock(block{kind: kindUser, text: "hello"})
 	lines := strings.Split(user, "\n")
 	if len(lines) != 3 || !strings.Contains(lines[1], "> hello") {

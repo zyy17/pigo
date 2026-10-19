@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/zyy17/pigo/internal/skills"
 )
@@ -56,12 +56,12 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 	}
 
 	m.comp.set("/r")
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if m.comp.text() != "/reset" || m.quitting {
 		t.Fatalf("partial enter: %q quit=%v", m.comp.text(), m.quitting)
 	}
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if !strings.Contains(m.transcript(), "transcript cleared") {
 		t.Fatal("second enter did not reset")
@@ -72,16 +72,16 @@ func TestFilterAndCompleteCommands(t *testing.T) {
 
 	m.comp.set("/e")
 	m.noteTyped()
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(chatModel)
 	if m.comp.text() != "/e" {
 		t.Fatalf("esc should close the menu, got %q", m.comp.text())
 	}
 
 	m.comp.set("hello")
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
 	m = next.(chatModel)
 	if m.comp.text() != "hello\n" || m.busy {
 		t.Fatalf("alt+enter: %q busy=%v", m.comp.text(), m.busy)

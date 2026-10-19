@@ -1,21 +1,42 @@
+// Chat model and turn lifecycle.
+//
+// runTUI is the only entry. Update routes terminal messages; apply folds
+// agent events into the transcript. Keys live in keys.go, the frame in
+// view.go, the composer in input.go, and scrolling in scroll.go.
 package cli
 
 import (
 	"context"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
 	"github.com/zyy17/pigo/internal/coding"
 	"github.com/zyy17/pigo/internal/skills"
 )
+
+const eventBuffer = 256
+
+type blockKind int
+
+const (
+	kindUser blockKind = iota
+	kindAssistant
+	kindTool
+	kindInfo
+	kindError
+)
+
+type block struct {
+	kind blockKind
+	text string
+}
 
 type chatModel struct {
 	session          *coding.Session
@@ -41,7 +62,6 @@ type chatModel struct {
 	follow  bool
 	top     int
 	started time.Time
-	cur     *frameCursor
 }
 
 type streamMsg struct {
@@ -52,18 +72,15 @@ type streamMsg struct {
 // Quitting leaves that screen, which restores the shell buffer from
 // before pigo started. Nothing is printed afterwards: there is no
 // session id and no token total to report.
+//
+// The alternate screen, the mouse, and the cursor are fields on the
+// view. Bubble Tea leaves the alternate screen when the program exits.
 func runTUI(session *coding.Session) error {
-	events := make(chan agent.Event, 256)
+	events := make(chan agent.Event, eventBuffer)
 	session.Subscribe(func(ev agent.Event) {
 		events <- ev
 	})
-	cur := &frameCursor{}
 	model := newChat(session, events)
-	model.cur = cur
-	// Ask the terminal to distinguish Shift+Enter before the program reads keys,
-	// and turn that mode off again so the user's shell is unchanged.
-	enableShiftEnter(os.Stdout)
-	defer disableShiftEnter(os.Stdout)
 	// The closure captures program. Prompt cannot run until Run is looping,
 	// so Send is never called on a nil program.
 	var program *tea.Program
@@ -79,13 +96,7 @@ func runTUI(session *coding.Session) error {
 			}
 		})
 	}
-	program = tea.NewProgram(
-		model,
-		tea.WithOutput(&placingWriter{out: os.Stdout, file: os.Stdout, cur: cur}),
-		tea.WithFilter(rewriteKeys),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	program = tea.NewProgram(model)
 	_, err := program.Run()
 	return err
 }
@@ -106,6 +117,7 @@ func newChat(session *coding.Session, events chan agent.Event) chatModel {
 	return m
 }
 
+// Init waits for the window size before the first frame.
 func (m chatModel) Init() tea.Cmd { return nil }
 
 func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -125,31 +137,26 @@ func (m chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(listen(m.events), cmd)
 		}
 		return m, cmd
-	case shiftEnterMsg:
-		if m.busy {
-			return m, nil
-		}
-		return m.newline()
 	case confirmMsg:
 		m.ask = msg.req
 		return m, nil
-	case tea.MouseMsg:
+	case tea.PasteMsg:
+		return m.onPaste(msg.Content)
+	case tea.MouseWheelMsg:
 		return m.onWheel(msg)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.onKey(msg)
 	}
 	return m, nil
 }
 
-func (m chatModel) onWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		return m.scrollRows(-1), nil
-	case tea.MouseButtonWheelDown:
-		return m.scrollRows(1), nil
-	default:
+func (m chatModel) onPaste(text string) (tea.Model, tea.Cmd) {
+	if m.busy || m.ask != nil || text == "" {
 		return m, nil
 	}
+	m.comp.insert(text)
+	m.noteTyped()
+	return m, nil
 }
 
 func (m *chatModel) resize(width, height int) tea.Cmd {
@@ -162,58 +169,6 @@ func (m *chatModel) resize(width, height int) tea.Cmd {
 		m.top = m.viewTop(len(m.historyLines()), m.transcriptRows())
 	}
 	return nil
-}
-
-func (m chatModel) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyCtrlC {
-		if m.ask != nil {
-			m = m.finishConfirm(false)
-		}
-		if m.busy {
-			if m.session != nil {
-				m.session.Abort()
-			}
-			return m, nil
-		}
-		m.quitting = true
-		return m, tea.Quit
-	}
-	// Ctrl-D quits when the composer is empty, matching Codex. A running
-	// turn is left to Ctrl-C.
-	if msg.Type == tea.KeyCtrlD && !m.busy && strings.TrimSpace(m.comp.text()) == "" {
-		m.quitting = true
-		return m, tea.Quit
-	}
-	if plainKey(msg) {
-		switch msg.Type {
-		case tea.KeyPgUp:
-			return m.scrollRows(-m.pageRows()), nil
-		case tea.KeyPgDown:
-			return m.scrollRows(m.pageRows()), nil
-		}
-	}
-	if m.ask != nil {
-		return m.answerConfirm(msg)
-	}
-	if m.busy {
-		// Esc stops the turn. The working row is the hint for that key.
-		if msg.Type == tea.KeyEsc && m.session != nil {
-			m.session.Abort()
-		}
-		return m, nil
-	}
-	// Esc returns a paused transcript to the tail. A slash menu owns Esc
-	// first, and a running turn already used it to interrupt.
-	if plainKey(msg) && msg.Type == tea.KeyEsc && !m.menuOpen() && m.canReturn() {
-		m.follow = true
-		m.top = 0
-		return m, nil
-	}
-	return m.onComposer(msg)
-}
-
-func plainKey(msg tea.KeyMsg) bool {
-	return !msg.Alt
 }
 
 func (m chatModel) submit(text string) (tea.Model, tea.Cmd) {

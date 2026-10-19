@@ -1,10 +1,21 @@
+// Opening banner: the wordmark, the session card, and the hint line.
 package cli
 
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+)
+
+const (
+	// wordmarkMinHeight is the terminal height that still fits the wordmark
+	// plus the session card without crowding the composer.
+	wordmarkMinHeight = 22
+	cardMinWidth      = 12
+	cardFallbackWidth = 80
+	cardBorderCols    = 2
+	cardPadCols       = 2
 )
 
 // mark is the pigo wordmark. Columns are p, i, g, o. Four rows, strokes
@@ -38,7 +49,7 @@ func wordmark() string {
 
 func (m chatModel) opening() string {
 	var parts []string
-	mark := m.height >= 22 && m.width >= wordmarkCols()
+	mark := m.height >= wordmarkMinHeight && m.width >= wordmarkCols()
 	if mark {
 		parts = append(parts, wordmark())
 	}
@@ -78,17 +89,17 @@ func (m chatModel) hintLine() string {
 func (m chatModel) sessionCard() string {
 	width := m.width
 	if width < 1 {
-		width = 80
+		width = cardFallbackWidth
 	}
 	title := "pigo " + version
 	meta := sessionMeta(m.modelName, m.root)
-	if width < 12 {
+	if width < cardMinWidth {
 		if meta == "" {
 			return title
 		}
 		return title + "\n" + meta
 	}
-	inner := width - 2
+	inner := width - cardBorderCols
 	top := cardBorderStyle.Render("╭" + strings.Repeat("─", inner) + "╮")
 	bot := cardBorderStyle.Render("╰" + strings.Repeat("─", inner) + "╯")
 	lines := []string{top, cardRow(title, false, inner)}
@@ -113,7 +124,7 @@ func sessionMeta(model, root string) string {
 }
 
 func cardRow(text string, dim bool, inner int) string {
-	room := inner - 2
+	room := inner - cardPadCols
 	if room < 1 {
 		room = 1
 	}

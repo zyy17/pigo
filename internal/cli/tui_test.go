@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -35,17 +35,17 @@ func TestChatLayout(t *testing.T) {
 	}
 	m := newChat(session, nil)
 	m.resize(80, 24)
-	got := m.View()
+	got := m.View().Content
 	if h := lipgloss.Height(got); h > 24 {
 		t.Fatalf("view is %d lines, taller than the terminal", h)
 	}
 	assertWidth(t, got, 80)
+	opened := ansi.Strip(got)
 	for _, want := range []string{"test-model", "enter send", "ctrl-c abort", "/exit", askPlaceholder, ">"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("layout missing %q:\n%s", want, got)
+		if !strings.Contains(opened, want) {
+			t.Fatalf("layout missing %q:\n%s", want, opened)
 		}
 	}
-	opened := ansi.Strip(got)
 	for _, want := range []string{"pigo", "0.1.0", "██████"} {
 		if !strings.Contains(opened, want) {
 			t.Fatalf("transcript missing %q:\n%s", want, opened)
@@ -53,7 +53,7 @@ func TestChatLayout(t *testing.T) {
 	}
 
 	m.apply(agent.Event{Type: agent.MessageUpdate, TextDelta: "# Title\nuse `code` and **bold**"})
-	streaming := m.View()
+	streaming := m.View().Content
 	for _, want := range []string{"Title", "code", "bold"} {
 		if !strings.Contains(streaming, want) {
 			t.Fatalf("streaming view missing %q:\n%s", want, streaming)
@@ -63,13 +63,13 @@ func TestChatLayout(t *testing.T) {
 		Type:    agent.MessageEnd,
 		Message: ai.Assistant("# Title\nuse `code` and **bold**", ai.StopStop),
 	})
-	done := ansi.Strip(m.View())
+	done := ansi.Strip(m.View().Content)
 	for _, want := range []string{"Title", "code", "bold", askPlaceholder} {
 		if !strings.Contains(done, want) {
 			t.Fatalf("finished reply missing %q:\n%s", want, done)
 		}
 	}
-	if lipgloss.Height(m.View()) > 24 {
+	if lipgloss.Height(m.View().Content) > 24 {
 		t.Fatal("finished frame is taller than the terminal")
 	}
 }
@@ -99,7 +99,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 	m.busy = true
 	for _, width := range []int{80, 140} {
 		m.resize(width, 24)
-		got := m.View()
+		got := m.View().Content
 		if h := lipgloss.Height(got); h > 24 {
 			t.Fatalf("width %d view is %d lines", width, h)
 		}
@@ -115,21 +115,21 @@ func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
 		text.WriteString("line\n")
 	}
 	m.apply(agent.Event{Type: agent.MessageUpdate, TextDelta: text.String()})
-	if h := lipgloss.Height(m.View()); h > 24 {
+	if h := lipgloss.Height(m.View().Content); h > 24 {
 		t.Fatalf("streaming view is %d lines", h)
 	}
-	assertWidth(t, m.View(), 80)
-	if !strings.Contains(m.View(), "line") {
+	assertWidth(t, m.View().Content, 80)
+	if !strings.Contains(m.View().Content, "line") {
 		t.Fatal("streaming reply is not in the frame")
 	}
 	m.apply(agent.Event{Type: agent.MessageEnd, Message: ai.Assistant(text.String(), ai.StopStop)})
-	if h := lipgloss.Height(m.View()); h > 24 {
+	if h := lipgloss.Height(m.View().Content); h > 24 {
 		t.Fatalf("after commit view is %d lines", h)
 	}
-	if !strings.Contains(m.transcript(), "line") || !strings.Contains(m.View(), "line") {
+	if !strings.Contains(m.transcript(), "line") || !strings.Contains(m.View().Content, "line") {
 		t.Fatal("finished reply left the frame")
 	}
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	if !strings.Contains(ansi.Strip(lines[len(lines)-1]), "ready") {
 		t.Fatal("footer left the bottom")
 	}
@@ -141,7 +141,7 @@ func TestChatShowsToolsAndText(t *testing.T) {
 	m.apply(agent.Event{Type: agent.ToolStart, ToolName: "write_file", Args: []byte(`{"path":"add.go"}`)})
 	m.apply(agent.Event{Type: agent.ToolEnd, ToolName: "write_file", Result: "wrote add.go (20 bytes)"})
 	m.apply(agent.Event{Type: agent.MessageUpdate, TextDelta: "Added "})
-	if !strings.Contains(m.View(), "Added") {
+	if !strings.Contains(m.View().Content, "Added") {
 		t.Fatal("partial reply is not in the live view")
 	}
 	m.apply(agent.Event{Type: agent.MessageUpdate, TextDelta: "add.go."})
@@ -157,7 +157,7 @@ func TestChatShowsToolsAndText(t *testing.T) {
 			t.Fatalf("transcript missing %q:\n%s", want, got)
 		}
 	}
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "Added add.go.") || !strings.Contains(view, "interrupted") {
 		t.Fatalf("finished reply left the frame:\n%s", view)
 	}
@@ -166,12 +166,13 @@ func TestChatShowsToolsAndText(t *testing.T) {
 func TestExitClearsTheLiveView(t *testing.T) {
 	m := newChat(nil, nil)
 	m.resize(80, 24)
-	if m.View() == "" {
+	if m.View().Content == "" {
 		t.Fatal("expected a live view")
 	}
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	m = next.(chatModel)
-	if m.View() != "" {
+	quit := m.View()
+	if quit.Content != "" || quit.Cursor != nil || !quit.AltScreen {
 		t.Fatal("quit left the input on screen")
 	}
 	if cmd == nil {
@@ -185,9 +186,9 @@ func TestExitClearsTheLiveView(t *testing.T) {
 func TestCtrlDQuitsWhenIdle(t *testing.T) {
 	m := newChat(nil, nil)
 	m.resize(40, 12)
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	m = next.(chatModel)
-	if !m.quitting || m.View() != "" {
+	if !m.quitting || m.View().Content != "" {
 		t.Fatal("ctrl-d did not quit")
 	}
 	if cmd == nil {
@@ -200,7 +201,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 	m = newChat(nil, nil)
 	m.resize(40, 12)
 	m.comp.insert("keep")
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	m = next.(chatModel)
 	if m.quitting || cmd != nil {
 		t.Fatal("ctrl-d quit with text in the composer")
@@ -209,7 +210,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 	m = newChat(nil, nil)
 	m.resize(40, 12)
 	m.busy = true
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	m = next.(chatModel)
 	if m.quitting || cmd != nil {
 		t.Fatal("ctrl-d quit a running turn")
@@ -231,7 +232,7 @@ func TestResetPrintsSeparator(t *testing.T) {
 	m := newChat(session, nil)
 	m.resize(80, 24)
 	m.comp.insert("/reset")
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if !strings.Contains(m.transcript(), "transcript cleared") {
 		t.Fatal("reset did not print a separator")
@@ -293,7 +294,7 @@ func TestChatRunsAWrite(t *testing.T) {
 	if m.busy {
 		t.Fatal("chat still busy")
 	}
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "Created hello.txt.") || !strings.Contains(view, askPlaceholder) {
 		t.Fatalf("finished frame:\n%s", view)
 	}
@@ -331,7 +332,7 @@ func TestCaretStaysInTheInput(t *testing.T) {
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
 	m.comp.insert("我们额")
-	got := m.View()
+	got := m.View().Content
 	assertWidth(t, got, 80)
 	var inputLine, footer string
 	lines := strings.Split(got, "\n")
@@ -388,7 +389,7 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 	}
 	m.live = src
 	m.resize(20, 24)
-	for _, line := range strings.Split(m.View(), "\n") {
+	for _, line := range strings.Split(m.View().Content, "\n") {
 		if w := ansi.StringWidth(line); w > 20 {
 			t.Fatalf("resized live view is %d cols: %q", w, line)
 		}
@@ -409,14 +410,14 @@ func TestTranscriptScroll(t *testing.T) {
 	}
 	m.addBlock(kindAssistant, text.String())
 
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.View().Content)
 	if strings.Contains(view, "row-00") {
 		t.Fatal("following frame still shows the oldest row")
 	}
 	if !strings.Contains(view, "row-79") {
 		t.Fatalf("following frame missing the tail:\n%s", view)
 	}
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	if len(lines) != 24 {
 		t.Fatalf("frame is %d lines", len(lines))
 	}
@@ -427,7 +428,7 @@ func TestTranscriptScroll(t *testing.T) {
 	room := m.transcriptRows()
 	n := len(m.historyLines())
 	start := m.viewTop(n, room)
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	m = next.(chatModel)
 	if moved := start - m.viewTop(n, room); moved != room-1 {
 		t.Fatalf("page up moved %d lines, want %d", moved, room-1)
@@ -435,54 +436,54 @@ func TestTranscriptScroll(t *testing.T) {
 	if m.follow {
 		t.Fatal("page up stayed pinned to the tail")
 	}
-	up := ansi.Strip(m.View())
+	up := ansi.Strip(m.View().Content)
 	if strings.Contains(up, "row-79") {
 		t.Fatal("page up did not leave the tail")
 	}
 	if up == view {
 		t.Fatal("page up did not change the frame")
 	}
-	paged := strings.Split(m.View(), "\n")
-	if !strings.Contains(ansi.Strip(paged[len(paged)-1]), "ready") || !strings.Contains(ansi.Strip(m.View()), askPlaceholder) {
+	paged := strings.Split(m.View().Content, "\n")
+	if !strings.Contains(ansi.Strip(paged[len(paged)-1]), "ready") || !strings.Contains(ansi.Strip(m.View().Content), askPlaceholder) {
 		t.Fatal("paging moved the composer or the footer")
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
-	if !m.follow || !strings.Contains(ansi.Strip(m.View()), "row-79") {
+	if !m.follow || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("esc did not return to the tail")
 	}
 
-	next, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
+	next, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 	m = next.(chatModel)
-	if m.follow || strings.Contains(ansi.Strip(m.View()), "row-79") {
+	if m.follow || strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("wheel up did not scroll one row")
 	}
-	next, _ = m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	next, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
 	m = next.(chatModel)
-	if !m.follow || !strings.Contains(ansi.Strip(m.View()), "row-79") {
+	if !m.follow || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("wheel down did not resume following")
 	}
 
 	m.follow = false
 	m.top = 0
-	held := ansi.Strip(m.View())
+	held := ansi.Strip(m.View().Content)
 	m.addBlock(kindInfo, "NEW-TAIL-LINE")
-	if strings.Contains(ansi.Strip(m.View()), "NEW-TAIL-LINE") {
+	if strings.Contains(ansi.Strip(m.View().Content), "NEW-TAIL-LINE") {
 		t.Fatal("a scrolled frame followed new output")
 	}
-	if !strings.Contains(held, "row-00") && !strings.Contains(ansi.Strip(m.View()), "row-0") {
+	if !strings.Contains(held, "row-00") && !strings.Contains(ansi.Strip(m.View().Content), "row-0") {
 		t.Fatal("reading position moved")
 	}
 	m.follow = true
-	if !strings.Contains(ansi.Strip(m.View()), "NEW-TAIL-LINE") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "NEW-TAIL-LINE") {
 		t.Fatal("following frame missed new output")
 	}
 
 	m.follow = false
 	m.top = 0
 	m.busy = true
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	if next.(chatModel).follow {
 		t.Fatal("esc while busy jumped to the tail")
 	}
@@ -495,7 +496,7 @@ func TestTranscriptScroll(t *testing.T) {
 	reply := make(chan bool, 1)
 	m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
 	m.busy = true
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
 	if m.follow || m.ask != nil {
 		t.Fatal("esc during confirm jumped or left the prompt open")

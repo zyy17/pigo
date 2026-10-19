@@ -1,3 +1,4 @@
+// Assistant prose styling for the transcript.
 package cli
 
 import (

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/zyy17/pigo/internal/agent"
@@ -47,24 +47,24 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	m := newChat(session, events)
 	m.resize(80, 24)
 
-	next, _ := m.Update(shiftEnterMsg{})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
 	m = next.(chatModel)
 	if m.comp.text() != "\n" {
 		t.Fatalf("shift+enter %q", m.comp.text())
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = next.(chatModel)
 	if m.comp.text() != "\n\n" {
 		t.Fatalf("ctrl+j %q", m.comp.text())
 	}
 	m.comp.set("please write hello.txt")
 
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
-	if !m.busy || !strings.Contains(ansi.Strip(m.View()), "Working") {
-		t.Fatalf("working view:\n%s", ansi.Strip(m.View()))
+	if !m.busy || !strings.Contains(ansi.Strip(m.View().Content), "Working") {
+		t.Fatalf("working view:\n%s", ansi.Strip(m.View().Content))
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "please write hello.txt") || !strings.Contains(ansi.Strip(m.View()), askPlaceholder) {
+	if !strings.Contains(ansi.Strip(m.View().Content), "please write hello.txt") || !strings.Contains(ansi.Strip(m.View().Content), askPlaceholder) {
 		t.Fatal("submitted line is not in the transcript above a cleared composer")
 	}
 	m = runCmds(t, m, cmd)
@@ -84,37 +84,37 @@ func TestHeadlessChatCompletesATurn(t *testing.T) {
 	if err != nil || string(body) != "hi\n" {
 		t.Fatalf("hello.txt %q err %v", body, err)
 	}
-	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
 	footer := lines[len(lines)-1]
 	if !strings.Contains(footer, "ready") || strings.Contains(footer, "saved") {
 		t.Fatalf("footer after the turn:\n%s", footer)
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "saved") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "saved") {
 		t.Fatal("finished reply left the frame")
 	}
 	_, x, y := m.layout()
-	lines = strings.Split(m.View(), "\n")
+	lines = strings.Split(m.View().Content, "\n")
 	if x != 2 || !strings.Contains(ansi.Strip(lines[y]), askPlaceholder) {
 		t.Fatalf("caret x=%d y=%d", x, y)
 	}
-	if up := strings.Count(m.View(), "\n") - y; up != 3 {
+	if up := strings.Count(m.View().Content, "\n") - y; up != 3 {
 		t.Fatalf("up=%d", up)
 	}
 
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/sk")})
+	next, _ = m.Update(tea.KeyPressMsg{Text: "/sk", Code: '/'})
 	m = next.(chatModel)
-	menu := ansi.Strip(m.View())
+	menu := ansi.Strip(m.View().Content)
 	if !strings.Contains(menu, "/skill:greet") || !strings.Contains(menu, "Write a greeting") || strings.Contains(menu, "clear the transcript") {
 		t.Fatalf("slash menu:\n%s", menu)
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 	if m.busy || m.comp.text() != "/skill:greet" {
 		t.Fatalf("enter completed %q busy %v", m.comp.text(), m.busy)
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
-	if strings.Contains(ansi.Strip(m.View()), "Write a greeting") {
+	if strings.Contains(ansi.Strip(m.View().Content), "Write a greeting") {
 		t.Fatal("esc left the slash menu open")
 	}
 }
@@ -137,7 +137,7 @@ func TestHeadlessEscInterruptsAHang(t *testing.T) {
 	m := newChat(session, events)
 	m.resize(80, 24)
 	m.comp.set("wait")
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(chatModel)
 
 	done := make(chan chatModel, 1)
@@ -145,7 +145,7 @@ func TestHeadlessEscInterruptsAHang(t *testing.T) {
 		done <- runCmds(t, m, cmd)
 	}()
 	script.Wait(t)
-	if _, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc}); cmd != nil {
+	if _, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc}); cmd != nil {
 		t.Fatal("esc started a command")
 	}
 	select {
@@ -153,8 +153,8 @@ func TestHeadlessEscInterruptsAHang(t *testing.T) {
 		if finished.busy || finished.status != "interrupted" {
 			t.Fatalf("status %q busy %v", finished.status, finished.busy)
 		}
-		if !strings.Contains(ansi.Strip(finished.View()), "interrupted") {
-			t.Fatalf("footer:\n%s", ansi.Strip(finished.View()))
+		if !strings.Contains(ansi.Strip(finished.View().Content), "interrupted") {
+			t.Fatalf("footer:\n%s", ansi.Strip(finished.View().Content))
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("esc did not interrupt")

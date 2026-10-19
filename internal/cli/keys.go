@@ -1,105 +1,138 @@
+// Key bindings for the chat.
+//
+// Enter sends. Shift+Enter inserts a newline when the terminal can tell
+// the two apart. Bubble Tea v2 asks for that disambiguation (the Kitty
+// keyboard protocol and xterm modifyOtherKeys) and turns it off on quit.
+// Ctrl+J, Alt+Enter, and a trailing backslash still insert a newline on
+// terminals that report Shift+Enter as a plain Enter.
 package cli
 
 import (
-	"io"
-	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
-// shiftEnterMsg is a newline. Bubble Tea v1 has no Shift+Enter key, so the
-// program filter turns the terminal's modified-Enter sequence into this.
-type shiftEnterMsg struct{}
-
-// xterm modifyOtherKeys mode 1. Unmodified keys stay as they are, and
-// Shift+Enter, which would otherwise be a plain CR, arrives as CSI 27 ; 2 ; 13 ~.
-// Bubble Tea v2 can request the kitty keyboard protocol itself. v1 cannot, and
-// turning that protocol on would re-encode keys this version does not read.
-const (
-	enableModifyOtherKeys  = "\x1b[>4;1m"
-	disableModifyOtherKeys = "\x1b[>4;0m"
-)
-
-func enableShiftEnter(w io.Writer) {
-	_, _ = io.WriteString(w, enableModifyOtherKeys)
+func (m chatModel) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m.onInterrupt()
+	case "ctrl+d":
+		if !m.busy && strings.TrimSpace(m.comp.text()) == "" {
+			m.quitting = true
+			return m, tea.Quit
+		}
+	}
+	if !msg.Mod.Contains(tea.ModAlt) {
+		switch msg.Code {
+		case tea.KeyPgUp:
+			return m.scrollRows(-m.pageRows()), nil
+		case tea.KeyPgDown:
+			return m.scrollRows(m.pageRows()), nil
+		}
+	}
+	if m.ask != nil {
+		return m.answerConfirm(msg)
+	}
+	if m.busy {
+		// Esc stops the turn. The working row is the hint for that key.
+		// A confirm prompt owns Esc first and uses it to deny.
+		if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) && m.session != nil {
+			m.session.Abort()
+		}
+		return m, nil
+	}
+	// Esc returns a paused transcript to the tail. The slash menu owns
+	// Esc before this, and a running turn already used it to interrupt.
+	if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) && !m.menuOpen() && m.canReturn() {
+		m.follow = true
+		m.top = 0
+		return m, nil
+	}
+	return m.onComposer(msg)
 }
 
-func disableShiftEnter(w io.Writer) {
-	_, _ = io.WriteString(w, disableModifyOtherKeys)
+func (m chatModel) onInterrupt() (tea.Model, tea.Cmd) {
+	if m.ask != nil {
+		m = m.finishConfirm(false)
+	}
+	if m.busy {
+		if m.session != nil {
+			m.session.Abort()
+		}
+		return m, nil
+	}
+	m.quitting = true
+	return m, tea.Quit
 }
 
-// rewriteKeys lets Shift+Enter through as a newline on terminals that report it.
-func rewriteKeys(_ tea.Model, msg tea.Msg) tea.Msg {
-	if isShiftEnter(msg) {
-		return shiftEnterMsg{}
+func (m chatModel) onComposer(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.Code == tea.KeyEnter || msg.Code == tea.KeyKpEnter {
+		if msg.Mod.Contains(tea.ModShift) || msg.Mod.Contains(tea.ModAlt) {
+			return m.newline()
+		}
+		return m.onEnter()
 	}
-	return msg
-}
-
-func isShiftEnter(msg tea.Msg) bool {
-	seq, ok := sequenceBytes(msg)
-	return ok && isShiftEnterCSI(seq)
-}
-
-// sequenceBytes reads the unrecognized CSI message Bubble Tea keeps unexported.
-func sequenceBytes(msg tea.Msg) ([]byte, bool) {
-	v := reflect.ValueOf(msg)
-	if !v.IsValid() || v.Kind() != reflect.Slice || v.Type().Name() == "" || v.Type().Elem().Kind() != reflect.Uint8 {
-		return nil, false
+	switch msg.String() {
+	case "ctrl+j":
+		return m.newline()
+	case "tab":
+		if m.menuOpen() {
+			m.completeSuggest()
+		}
+		return m, nil
+	case "esc":
+		m.suggestDismissed = true
+		return m, nil
+	case "up":
+		if m.menuOpen() {
+			m.moveSuggest(-1)
+		}
+		return m, nil
+	case "down":
+		if m.menuOpen() {
+			m.moveSuggest(1)
+		}
+		return m, nil
+	case "backspace":
+		m.comp.backspace()
+		m.noteTyped()
+		return m, nil
+	case "delete":
+		m.comp.del()
+		m.noteTyped()
+		return m, nil
+	case "left", "ctrl+b":
+		m.comp.left()
+		return m, nil
+	case "right", "ctrl+f":
+		m.comp.right()
+		return m, nil
+	case "home", "ctrl+a":
+		m.comp.home()
+		return m, nil
+	case "end", "ctrl+e":
+		m.comp.end()
+		return m, nil
+	case "ctrl+u":
+		m.comp.clear()
+		m.noteTyped()
+		return m, nil
+	case "ctrl+w":
+		m.comp.wordBack()
+		m.noteTyped()
+		return m, nil
+	case "space":
+		m.comp.insert(" ")
+		m.noteTyped()
+		return m, nil
+	default:
+		if msg.Text != "" && !msg.Mod.Contains(tea.ModCtrl) {
+			m.comp.insert(msg.Text)
+			m.noteTyped()
+		}
+		return m, nil
 	}
-	buf := make([]byte, v.Len())
-	reflect.Copy(reflect.ValueOf(buf), v)
-	return buf, true
-}
-
-// isShiftEnterCSI matches xterm modifyOtherKeys (CSI 27 ; mod ; 13 ~) and
-// kitty's CSI-u form (CSI 13 ; mod u). The shift bit is the low bit of mod-1.
-func isShiftEnterCSI(seq []byte) bool {
-	s := string(seq)
-	if rest, ok := strings.CutPrefix(s, "\x1b[27;"); ok && strings.HasSuffix(rest, "~") {
-		parts := strings.Split(strings.TrimSuffix(rest, "~"), ";")
-		return len(parts) >= 2 && parts[1] == "13" && shifted(parts[0])
-	}
-	if rest, ok := strings.CutPrefix(s, "\x1b[13;"); ok && strings.HasSuffix(rest, "u") {
-		mod, _, _ := strings.Cut(strings.TrimSuffix(rest, "u"), ";")
-		return shifted(mod)
-	}
-	return false
-}
-
-func shifted(mod string) bool {
-	n, err := strconv.Atoi(mod)
-	if err != nil || n < 2 {
-		return false
-	}
-	return (n-1)&1 == 1
-}
-
-// continuedLine is the Codex-style fallback: a trailing backslash and Enter
-// inserts a newline and drops that backslash. An even count is an escaped
-// backslash, so the line submits as typed. Spaces after the slash cancel it.
-func continuedLine(text string) (string, bool) {
-	head := ""
-	line := text
-	if i := strings.LastIndex(text, "\n"); i >= 0 {
-		head = text[:i+1]
-		line = text[i+1:]
-	}
-	if strings.TrimRight(line, " \t") != line {
-		return "", false
-	}
-	n := 0
-	for strings.HasSuffix(line, `\`) {
-		n++
-		line = strings.TrimSuffix(line, `\`)
-	}
-	if n == 0 || n%2 == 0 {
-		return "", false
-	}
-	return head + line + strings.Repeat(`\`, n-1) + "\n", true
 }
 
 func (m chatModel) newline() (tea.Model, tea.Cmd) {
@@ -121,24 +154,27 @@ func (m chatModel) onEnter() (tea.Model, tea.Cmd) {
 	return m.submit(strings.TrimSpace(m.comp.text()))
 }
 
-// fmtElapsed is the compact clock on the working row: 3s, 1m 05s, 1h 02m 03s.
-func fmtElapsed(d time.Duration) string {
-	if d < 0 {
-		d = 0
+// continuedLine is the fallback for a terminal that cannot report
+// Shift+Enter: a trailing backslash and Enter inserts a newline and drops
+// that backslash. An even count is an escaped backslash, so the line
+// submits as typed. Spaces after the slash cancel it.
+func continuedLine(text string) (string, bool) {
+	head := ""
+	line := text
+	if i := strings.LastIndex(text, "\n"); i >= 0 {
+		head = text[:i+1]
+		line = text[i+1:]
 	}
-	s := int(d.Seconds())
-	if s < 60 {
-		return strconv.Itoa(s) + "s"
+	if strings.TrimRight(line, " \t") != line {
+		return "", false
 	}
-	if s < 3600 {
-		return strconv.Itoa(s/60) + "m " + twoDigits(s%60) + "s"
+	n := 0
+	for strings.HasSuffix(line, `\`) {
+		n++
+		line = strings.TrimSuffix(line, `\`)
 	}
-	return strconv.Itoa(s/3600) + "h " + twoDigits((s%3600)/60) + "m " + twoDigits(s%60) + "s"
-}
-
-func twoDigits(n int) string {
-	if n < 10 {
-		return "0" + strconv.Itoa(n)
+	if n == 0 || n%2 == 0 {
+		return "", false
 	}
-	return strconv.Itoa(n)
+	return head + line + strings.Repeat(`\`, n-1) + "\n", true
 }

@@ -1,3 +1,9 @@
+// Frame layout.
+//
+// The transcript fills the space above a fixed band: an optional working
+// or confirm row, the slash menu, the composer, and the status bar. View
+// declares the alternate screen and asks Bubble Tea to park the hardware
+// cursor on the composer cell.
 package cli
 
 import (
@@ -6,8 +12,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+)
+
+const (
+	// gutterCols is the "> " / "• " prefix.
+	gutterCols = 2
+	// previewLines is how much of a tool result stays in the transcript.
+	previewLines = 3
 )
 
 type footerKind int
@@ -26,53 +40,29 @@ type footerPiece struct {
 	text string
 }
 
-type blockKind int
-
-const (
-	kindUser blockKind = iota
-	kindAssistant
-	kindTool
-	kindInfo
-	kindError
-)
-
-type block struct {
-	kind blockKind
-	text string
-}
-
-func (m chatModel) View() string {
+func (m chatModel) View() tea.View {
 	body, x, y := m.layout()
-	if m.cur != nil {
-		show := m.ready && !m.quitting && body != ""
-		up := 0
-		if show {
-			n := strings.Count(body, "\n")
-			up = n - y
-			if up < 0 {
-				up = 0
-			}
-		}
-		m.cur.set(x, up, show)
-	}
-	return body
+	v := tea.NewView(body)
+	// Keep the alternate screen on the quit frame too. Shutdown then
+	// leaves that screen. An empty main-screen frame would erase the
+	// shell lines below the cursor instead of restoring them.
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	placeCursor(&v, x, y, m.ready && !m.quitting && body != "")
+	return v
 }
 
 // layout is the frame and the caret cell inside it. y counts from the top.
-// The transcript fills the space above a fixed composer and footer.
 func (m chatModel) layout() (body string, x, y int) {
-	// An empty view lets Bubble Tea erase the frame on quit.
+	// Quit and the first paint send an empty frame. The alternate screen
+	// stays on, so shutdown restores the shell instead of erasing it.
 	if !m.ready || m.quitting {
 		return "", 0, 0
 	}
-	input, cx, cy := m.inputBlock()
+	input, x, cy := m.inputBlock()
 	above := m.chromeAbove()
-	bottom := append(append([]string{}, above...), input, "", m.footer())
-	room := m.height - stackHeight(bottom)
-	if room < 0 {
-		room = 0
-	}
-	head := m.transcriptWindow(room)
+	bottom := joinChrome(above, input, m.footer())
+	head := m.transcriptWindow(roomFor(m.height, bottom))
 	y = stackHeight(head) + stackHeight(above) + cy
 	body = strings.Join(append(head, bottom...), "\n")
 	body, dropped := fitHeightDrop(body, m.height)
@@ -80,12 +70,28 @@ func (m chatModel) layout() (body string, x, y int) {
 	if y < 0 {
 		y = 0
 	}
-	return body, cx, y
+	return body, x, y
+}
+
+// joinChrome is the fixed band under the transcript: chrome, composer,
+// a blank line, and the status bar.
+func joinChrome(above []string, input, footer string) []string {
+	parts := make([]string, 0, len(above)+3)
+	parts = append(parts, above...)
+	return append(parts, input, "", footer)
+}
+
+func roomFor(height int, parts []string) int {
+	room := height - stackHeight(parts)
+	if room < 0 {
+		return 0
+	}
+	return room
 }
 
 // chromeAbove is the fixed band between the transcript and the composer.
 func (m chatModel) chromeAbove() []string {
-	above := []string{""}
+	above := []string{""} // blank line under the transcript
 	if panel := m.confirmView(); panel != "" {
 		// The confirm panel takes the working-row slot. Esc denies the
 		// command, so the interrupt hint stays hidden.
@@ -97,109 +103,6 @@ func (m chatModel) chromeAbove() []string {
 		above = append(above, menu)
 	}
 	return above
-}
-
-func (m chatModel) transcriptRows() int {
-	input, _, _ := m.inputBlock()
-	bottom := append(append([]string{}, m.chromeAbove()...), input, "", m.footer())
-	room := m.height - stackHeight(bottom)
-	if room < 0 {
-		return 0
-	}
-	return room
-}
-
-// transcriptWindow is the visible slice of the transcript. Short history
-// stays at the top of that slice; the spare rows sit above the composer.
-func (m chatModel) transcriptWindow(room int) []string {
-	if room <= 0 {
-		return nil
-	}
-	lines := m.historyLines()
-	start := m.viewTop(len(lines), room)
-	end := start + room
-	if end > len(lines) {
-		end = len(lines)
-	}
-	window := make([]string, 0, room)
-	if start < end {
-		window = append(window, lines[start:end]...)
-	}
-	for len(window) < room {
-		window = append(window, "")
-	}
-	return window
-}
-
-func (m chatModel) viewTop(n, room int) int {
-	maxStart := n - room
-	if maxStart < 0 {
-		maxStart = 0
-	}
-	if m.follow || m.top >= maxStart {
-		return maxStart
-	}
-	if m.top < 0 {
-		return 0
-	}
-	return m.top
-}
-
-// scrollRows moves the transcript. Negative rows go toward older lines.
-// Reaching the tail resumes follow, so the next output sticks to the bottom.
-func (m chatModel) scrollRows(rows int) chatModel {
-	if rows == 0 || !m.ready {
-		return m
-	}
-	n := len(m.historyLines())
-	room := m.transcriptRows()
-	maxStart := n - room
-	if maxStart < 1 {
-		m.follow = true
-		m.top = 0
-		return m
-	}
-	start := maxStart
-	if !m.follow {
-		start = m.top
-		if start < 0 {
-			start = 0
-		}
-		if start > maxStart {
-			start = maxStart
-		}
-	}
-	next := start + rows
-	if next < 0 {
-		next = 0
-	}
-	if next >= maxStart {
-		m.follow = true
-		m.top = 0
-		return m
-	}
-	m.follow = false
-	m.top = next
-	return m
-}
-
-// pageRows is one viewport minus a one-line overlap, matching Codex.
-func (m chatModel) pageRows() int {
-	page := m.transcriptRows() - 1
-	if page < 1 {
-		return 1
-	}
-	return page
-}
-
-func (m chatModel) canReturn() bool {
-	if m.follow || !m.ready {
-		return false
-	}
-	n := len(m.historyLines())
-	room := m.transcriptRows()
-	maxStart := n - room
-	return maxStart > 0 && m.top < maxStart
 }
 
 func (m chatModel) footer() string {
@@ -429,10 +332,10 @@ func paneCols(width int) int {
 
 // textCols is the width inside the "> " / "• " gutter.
 func textCols(width int) int {
-	if width < 3 {
+	if width < gutterCols+1 {
 		return 1
 	}
-	return width - 2
+	return width - gutterCols
 }
 
 func (m chatModel) paintLines(text string, style lipgloss.Style) string {
@@ -449,34 +352,6 @@ func (m chatModel) paintLines(text string, style lipgloss.Style) string {
 		b.WriteString(style.Render(wrapText(line, width)))
 	}
 	return b.String()
-}
-
-func (m chatModel) transcript() string {
-	return strings.Join(m.historyParts(false), "\n\n")
-}
-
-func (m chatModel) historyLines() []string {
-	text := strings.Join(m.historyParts(true), "\n\n")
-	if text == "" {
-		return nil
-	}
-	return strings.Split(text, "\n")
-}
-
-func (m chatModel) historyParts(includeLive bool) []string {
-	parts := make([]string, 0, len(m.blocks)+2)
-	if m.ready {
-		if opening := m.opening(); opening != "" {
-			parts = append(parts, opening)
-		}
-	}
-	for _, b := range m.blocks {
-		parts = append(parts, m.renderBlock(b))
-	}
-	if includeLive && strings.TrimSpace(m.live) != "" {
-		parts = append(parts, m.paintAssistant(m.live))
-	}
-	return parts
 }
 
 func ranTitle(name string, args []byte) string {
@@ -497,8 +372,7 @@ func toolPreview(result string) string {
 		return ""
 	}
 	lines := strings.Split(result, "\n")
-	const show = 3
-	n := min(len(lines), show)
+	n := min(len(lines), previewLines)
 	var b strings.Builder
 	for i := range n {
 		if i > 0 {
@@ -535,6 +409,33 @@ func partHeight(s string) int {
 		return 1
 	}
 	return lipgloss.Height(s)
+}
+
+// fmtElapsed is the compact clock on the working row: 3s, 1m 05s, 1h 02m 03s.
+func fmtElapsed(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	s := int(d.Seconds())
+	if s < minuteSeconds {
+		return strconv.Itoa(s) + "s"
+	}
+	if s < hourSeconds {
+		return strconv.Itoa(s/minuteSeconds) + "m " + twoDigits(s%minuteSeconds) + "s"
+	}
+	return strconv.Itoa(s/hourSeconds) + "h " + twoDigits((s%hourSeconds)/minuteSeconds) + "m " + twoDigits(s%minuteSeconds) + "s"
+}
+
+const (
+	minuteSeconds = 60
+	hourSeconds   = 3600
+)
+
+func twoDigits(n int) string {
+	if n < 10 {
+		return "0" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
 }
 
 func fitHeightDrop(s string, height int) (string, int) {
