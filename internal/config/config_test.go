@@ -115,6 +115,49 @@ func TestMissingFilesUseDefaults(t *testing.T) {
 	}
 }
 
+func TestSessionDirPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PIGO_PROVIDER", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+	t.Setenv("PIGO_SESSION_DIR", "")
+	if err := os.WriteFile(filepath.Join(dir, "pigo.yaml"), []byte("session_dir: /from-file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionDir != "/from-file" {
+		t.Fatalf("file %q", cfg.SessionDir)
+	}
+	t.Setenv("PIGO_SESSION_DIR", "/from-env")
+	cfg, err = Load(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionDir != "/from-env" {
+		t.Fatalf("env %q", cfg.SessionDir)
+	}
+	cfg, err = Load(Config{SessionDir: "/from-flag"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionDir != "/from-flag" || cfg.Continue || cfg.NoSession || cfg.Session != "" {
+		t.Fatalf("%#v", cfg)
+	}
+	cfg, err = Load(Config{Continue: true, Session: "abc", NoSession: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Continue || cfg.Session != "abc" || !cfg.NoSession {
+		t.Fatalf("flags %#v", cfg)
+	}
+}
+
 func TestYoloPrecedence(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

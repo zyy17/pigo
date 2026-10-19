@@ -26,6 +26,11 @@ type Config struct {
 	Stream        ai.StreamFunc
 	// Yolo skips the dangerous-command check.
 	Yolo bool
+	// SessionDir is the sessions root, the parent of the per-workspace directory.
+	// Empty leaves the transcript in memory.
+	SessionDir string
+	// Resume is empty for a new session, ResumeLatest, or a path, id, or unique prefix.
+	Resume string
 }
 
 // Session is one coding-agent conversation in a workspace.
@@ -35,6 +40,7 @@ type Session struct {
 	model   string
 	skills  []skills.Skill
 	yolo    bool
+	journal *journal
 	confirm func(ctx context.Context, command, reason string) (bool, error)
 }
 
@@ -61,6 +67,22 @@ func New(cfg Config) (*Session, error) {
 		skills: found,
 		yolo:   cfg.Yolo,
 	}
+	var prior []ai.Message
+	var record func(ai.Message) error
+	if strings.TrimSpace(cfg.SessionDir) != "" {
+		j, msgs, err := openJournal(cfg.SessionDir, ws.Root(), cfg.Resume)
+		if err != nil {
+			return nil, err
+		}
+		session.journal = j
+		prior = msgs
+		record = func(msg ai.Message) error {
+			if session.journal == nil {
+				return nil
+			}
+			return session.journal.append(msg, session.model)
+		}
+	}
 	ag, err := agent.New(agent.Config{
 		SystemPrompt: buildSystemPrompt(ws.Root(), found),
 		Model:        cfg.Model,
@@ -68,12 +90,23 @@ func New(cfg Config) (*Session, error) {
 		Stream:       stream,
 		MaxTurns:     cfg.MaxTurns,
 		Before:       session.beforeTool,
+		Record:       record,
 	})
 	if err != nil {
+		session.closeJournal()
 		return nil, err
+	}
+	if len(prior) > 0 {
+		ag.SetMessages(prior)
 	}
 	session.agent = ag
 	return session, nil
+}
+
+func (s *Session) closeJournal() {
+	if s.journal != nil {
+		s.journal.close()
+	}
 }
 
 // SetConfirm installs the interactive check. Call it before Prompt.
@@ -141,6 +174,26 @@ func (s *Session) Root() string { return s.root }
 // Model is the model name sent on each request.
 func (s *Session) Model() string { return s.model }
 
+// Messages is a copy of the transcript, including messages restored from a session file.
+func (s *Session) Messages() []ai.Message { return s.agent.Messages() }
+
+// SessionID is the id in the session header. It is empty when persistence is off.
+func (s *Session) SessionID() string {
+	if s.journal == nil {
+		return ""
+	}
+	return s.journal.id
+}
+
+// SessionFile is the JSONL path. It is empty until the first stored message,
+// or until an existing file is resumed.
+func (s *Session) SessionFile() string {
+	if s.journal == nil {
+		return ""
+	}
+	return s.journal.path
+}
+
 // Usage returns the latest model call and the session sum.
 func (s *Session) Usage() agent.Usage { return s.agent.Usage() }
 
@@ -159,8 +212,24 @@ func (s *Session) Prompt(ctx context.Context, text string) error {
 	return s.agent.Prompt(ctx, text)
 }
 
-// Reset clears the transcript.
-func (s *Session) Reset() { s.agent.Reset() }
+// Reset clears the live transcript and the in-memory token total.
+// When a session file is open, the next prompt starts a new file.
+// The previous file stays on disk.
+func (s *Session) Reset() error {
+	s.agent.Reset()
+	if s.journal == nil {
+		return nil
+	}
+	dir, cwd := s.journal.dir, s.journal.cwd
+	s.journal.close()
+	next, err := newJournal(dir, cwd)
+	if err != nil {
+		s.journal = nil
+		return err
+	}
+	s.journal = next
+	return nil
+}
 
 // Abort cancels the running prompt.
 func (s *Session) Abort() { s.agent.Abort() }

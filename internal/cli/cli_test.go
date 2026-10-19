@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/zyy17/pigo/internal/scriptapi"
 )
 
 func TestMain(m *testing.M) {
@@ -54,6 +56,57 @@ func TestUnknownSkill(t *testing.T) {
 	err := run([]string{"-p", "/skill:missing", "-w", t.TempDir()}, strings.NewReader(""), &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), `unknown skill "missing"`) {
 		t.Fatal(err)
+	}
+}
+
+func TestREPLResetStartsANewSession(t *testing.T) {
+	dir := t.TempDir()
+	script, srv := scriptapi.NewServer(t, "test-key", []scriptapi.Reply{
+		{Text: "first answer"},
+		{Text: "fresh answer"},
+	})
+	t.Setenv("PIGO_PROVIDER", "openai")
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_BASE_URL", srv.URL+"/v1")
+	t.Setenv("OPENAI_MODEL", "test-model")
+
+	if err := run([]string{"-w", dir, "-p", "remember cedar"}, strings.NewReader(""), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := run([]string{"-w", dir, "-c"}, strings.NewReader("/reset\nask after reset\n/exit\n"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "transcript cleared") || !strings.Contains(out.String(), "resumed") {
+		t.Fatalf("output:\n%s", out.String())
+	}
+	reqs := script.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("requests %d", len(reqs))
+	}
+	second := reqs[1]
+	var texts []string
+	for _, msg := range second.Messages {
+		texts = append(texts, msg.Role+":"+msg.Content)
+	}
+	joined := strings.Join(texts, "\n")
+	if strings.Contains(joined, "remember cedar") || strings.Contains(joined, "first answer") {
+		t.Fatalf("reset kept the old transcript:\n%s", joined)
+	}
+	if !strings.Contains(joined, "ask after reset") {
+		t.Fatalf("new prompt missing:\n%s", joined)
+	}
+}
+
+func TestSessionFlagsConflict(t *testing.T) {
+	var out bytes.Buffer
+	err := run([]string{"-c", "--no-session", "-p", "hi"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "continue") {
+		t.Fatal(err)
+	}
+	err = run([]string{"--session", "abc", "--no-session", "-p", "hi"}, strings.NewReader(""), &out)
+	if err == nil {
+		t.Fatal("session and no-session were both accepted")
 	}
 }
 

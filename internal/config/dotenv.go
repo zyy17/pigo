@@ -35,7 +35,7 @@ func exportDotEnv(vals map[string]string) error {
 	return nil
 }
 
-// overlay maps PIGO_PROVIDER, OPENAI_*, and PIGO_YOLO through get.
+// overlay maps PIGO_PROVIDER, OPENAI_*, PIGO_YOLO, and PIGO_SESSION_DIR through get.
 // Load calls it once for the process environment and once for .env.
 func overlay(get func(string) string) map[string]any {
 	out := map[string]any{}

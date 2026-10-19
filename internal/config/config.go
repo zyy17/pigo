@@ -24,21 +24,26 @@ const (
 
 // Config is every setting the CLI needs. Prompt comes from flags only.
 type Config struct {
-	Provider  string `koanf:"provider"`
-	APIKey    string `koanf:"api_key"`
-	BaseURL   string `koanf:"base_url"`
-	Model     string `koanf:"model"`
-	Workspace string `koanf:"workspace"`
-	Yolo      bool   `koanf:"yolo"`
-	Prompt    string `koanf:"-"`
+	Provider   string `koanf:"provider"`
+	APIKey     string `koanf:"api_key"`
+	BaseURL    string `koanf:"base_url"`
+	Model      string `koanf:"model"`
+	Workspace  string `koanf:"workspace"`
+	Yolo       bool   `koanf:"yolo"`
+	SessionDir string `koanf:"session_dir"`
+	Prompt     string `koanf:"-"`
+	Continue   bool   `koanf:"-"`
+	NoSession  bool   `koanf:"-"`
+	Session    string `koanf:"-"`
 }
 
 // envNames maps process variables onto the flat config keys.
 var envNames = map[string]string{
-	"PIGO_PROVIDER":   "provider",
-	"OPENAI_API_KEY":  "api_key",
-	"OPENAI_BASE_URL": "base_url",
-	"OPENAI_MODEL":    "model",
+	"PIGO_PROVIDER":    "provider",
+	"OPENAI_API_KEY":   "api_key",
+	"OPENAI_BASE_URL":  "base_url",
+	"OPENAI_MODEL":     "model",
+	"PIGO_SESSION_DIR": "session_dir",
 }
 
 // Load merges settings. Each later source overrides the earlier one:
@@ -72,6 +77,9 @@ func Load(flags Config) (Config, error) {
 		return Config{}, err
 	}
 	cfg.Prompt = flags.Prompt
+	cfg.Continue = flags.Continue
+	cfg.NoSession = flags.NoSession
+	cfg.Session = strings.TrimSpace(flags.Session)
 	return cfg.trimmed(), nil
 }
 
@@ -81,7 +89,9 @@ func (cfg Config) trimmed() Config {
 	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
 	cfg.Model = strings.TrimSpace(cfg.Model)
 	cfg.Workspace = strings.TrimSpace(cfg.Workspace)
+	cfg.SessionDir = strings.TrimSpace(cfg.SessionDir)
 	cfg.Prompt = strings.TrimSpace(cfg.Prompt)
+	cfg.Session = strings.TrimSpace(cfg.Session)
 	return cfg
 }
 
@@ -147,6 +157,7 @@ func flagMap(flags Config) map[string]any {
 	put("base_url", flags.BaseURL)
 	put("model", flags.Model)
 	put("workspace", flags.Workspace)
+	put("session_dir", flags.SessionDir)
 	// A false flag must not clear yolo: true from a file.
 	if flags.Yolo {
 		out["yolo"] = true

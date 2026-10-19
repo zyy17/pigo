@@ -26,7 +26,12 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 
 	a.emit(Event{Type: AgentStart})
 	user := ai.User(text)
-	a.add(user)
+	if err := a.add(user); err != nil {
+		a.clearCancel()
+		cancel()
+		a.emit(Event{Type: AgentEnd, Err: err})
+		return err
+	}
 	a.emit(Event{Type: MessageStart, Message: user})
 	a.emit(Event{Type: MessageEnd, Message: user})
 
@@ -116,10 +121,10 @@ func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 			if !started {
 				a.emit(Event{Type: MessageStart, Message: msg})
 			}
-			a.add(msg)
+			addErr := a.add(msg)
 			last, session := a.noteCallUsage(ev.Usage)
 			a.emit(Event{Type: MessageEnd, Message: msg, Usage: last, Session: session})
-			return msg, nil
+			return msg, addErr
 		case ai.EventError:
 			return a.finishStreamError(started, ev)
 		}
@@ -142,9 +147,12 @@ func (a *Agent) finishStreamError(started bool, ev ai.Event) (ai.Message, error)
 		if !started {
 			a.emit(Event{Type: MessageStart, Message: msg})
 		}
-		a.add(msg)
+		addErr := a.add(msg)
 		last, session := a.noteCallUsage(nil)
 		a.emit(Event{Type: MessageEnd, Message: msg, Usage: last, Session: session})
+		if addErr != nil {
+			return msg, errors.Join(err, addErr)
+		}
 	}
 	return msg, err
 }
@@ -175,8 +183,7 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 			return a.finishHook(call, err)
 		}
 		if d.Block {
-			a.blockCall(call, d.Reason)
-			return nil
+			return a.blockCall(call, d.Reason)
 		}
 		if d.Args != nil {
 			call.Arguments = d.Args
@@ -184,8 +191,7 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 	}
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: call.Arguments})
 	text, isErr := a.callTool(ctx, call)
-	a.appendResult(call, text, isErr)
-	return nil
+	return a.appendResult(call, text, isErr)
 }
 
 // finishHook records the hook error as this call's result.
@@ -196,24 +202,24 @@ func (a *Agent) finishHook(call ai.ToolCall, err error) error {
 	if errors.Is(err, context.Canceled) {
 		text = "aborted"
 	}
-	a.skipCall(call, text)
+	writeErr := a.skipCall(call, text)
 	if errors.Is(err, context.Canceled) {
 		return context.Canceled
 	}
-	return nil
+	return writeErr
 }
 
-func (a *Agent) blockCall(call ai.ToolCall, reason string) {
+func (a *Agent) blockCall(call ai.ToolCall, reason string) error {
 	if reason == "" {
 		reason = "blocked"
 	}
-	a.skipCall(call, "blocked: "+reason)
+	return a.skipCall(call, "blocked: "+reason)
 }
 
 // skipCall pairs a call that will not run with an error result.
-func (a *Agent) skipCall(call ai.ToolCall, text string) {
+func (a *Agent) skipCall(call ai.ToolCall, text string) error {
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: call.Arguments})
-	a.appendResult(call, text, true)
+	return a.appendResult(call, text, true)
 }
 
 // closeCalls records a result for tool calls that will not run.
@@ -228,7 +234,8 @@ func (a *Agent) closeCalls(msg ai.Message) {
 		text = "not executed"
 	}
 	for _, call := range msg.ToolCalls {
-		a.skipCall(call, text)
+		// The turn is already failing. Still pair the call in memory.
+		_ = a.skipCall(call, text)
 	}
 }
 
@@ -236,15 +243,15 @@ func (a *Agent) closeCalls(msg ai.Message) {
 // An assistant message with an unpaired tool call makes the next request invalid.
 func (a *Agent) abortRemaining(calls []ai.ToolCall) {
 	for _, call := range calls {
-		a.skipCall(call, "aborted")
+		_ = a.skipCall(call, "aborted")
 	}
 }
 
 // appendResult pairs a tool call with its result. The result uses the call's
 // ID. The next model request needs that pair.
-func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
+func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) error {
 	msg := ai.ToolResult(call.ID, call.Name, text, isError)
-	a.add(msg)
+	err := a.add(msg)
 	a.emit(Event{
 		Type:     ToolEnd,
 		ToolID:   call.ID,
@@ -254,6 +261,7 @@ func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
 	})
 	a.emit(Event{Type: MessageStart, Message: msg})
 	a.emit(Event{Type: MessageEnd, Message: msg})
+	return err
 }
 
 func (a *Agent) callTool(ctx context.Context, call ai.ToolCall) (string, bool) {

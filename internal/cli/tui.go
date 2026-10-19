@@ -74,8 +74,8 @@ type streamMsg struct {
 
 // runTUI draws the chat on the alternate screen, the way Codex does.
 // Quitting leaves that screen, which restores the shell buffer from
-// before pigo started. Nothing is printed afterwards. Token counts stay
-// on the status line while the session is open, and are not saved.
+// before pigo started. Nothing is printed afterwards. The session file
+// is the resume handle. Token counts stay on the status line and are not saved.
 //
 // The alternate screen, the mouse, and the cursor are fields on the
 // view. Bubble Tea leaves the alternate screen when the program exits.
@@ -102,7 +102,7 @@ func runTUI(session *coding.Session) error {
 }
 
 func newChat(session *coding.Session) chatModel {
-	return chatModel{
+	m := chatModel{
 		session:   session,
 		modelName: session.Model(),
 		root:      session.Root(),
@@ -112,6 +112,26 @@ func newChat(session *coding.Session) chatModel {
 		width:     1,
 		height:    1,
 		scroll:    followTail,
+	}
+	m.seedTranscript(session.Messages())
+	return m
+}
+
+// seedTranscript draws a resumed session before the first frame.
+// The blocks match a live turn: user text, assistant text, then each tool.
+func (m *chatModel) seedTranscript(msgs []ai.Message) {
+	for _, msg := range msgs {
+		switch msg.Role {
+		case ai.RoleUser:
+			m.addBlock(kindUser, msg.Text)
+		case ai.RoleAssistant:
+			m.addBlock(kindAssistant, msg.Text)
+			for _, call := range msg.ToolCalls {
+				m.addBlock(kindRan, coding.RanTitle(call.Name, call.Arguments))
+			}
+		case ai.RoleToolResult:
+			m.addBlock(kindTool, toolPreview(msg.Text))
+		}
 	}
 }
 
@@ -178,10 +198,21 @@ func (m *chatModel) submit(text string) tea.Cmd {
 		m.quitting = true
 		return tea.Quit
 	case cmdReset:
-		m.session.Reset()
+		// The separator clears what the model will see. The previous file stays.
+		saved := ""
+		if m.session.SessionFile() != "" {
+			saved = m.session.SessionID()
+		}
+		if err := m.session.Reset(); err != nil {
+			m.addBlock(kindError, err.Error())
+			return nil
+		}
 		m.live = ""
 		m.clearUsage()
 		m.addBlock(kindInfo, "— transcript cleared —")
+		if saved != "" {
+			m.addBlock(kindInfo, "previous session "+saved)
+		}
 		return nil
 	}
 	expanded, err := commandText(m.session, text)
