@@ -11,7 +11,7 @@ import (
 )
 
 // configureShell puts the shell in its own process group and kills that
-// group when the command context ends. Otherwise "sleep 5" inside sh
+// group when the command context ends. Otherwise "sleep 5" inside bash
 // keeps the output pipe open and the tool waits for the child.
 func configureShell(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -28,10 +28,10 @@ func configureShell(cmd *exec.Cmd) {
 	}
 }
 
-// newShellCommand runs command in sh. configureShell kills the process
-// group, because a child can keep stdout open after sh exits.
+// newShellCommand runs command in bash. configureShell kills the process
+// group, because a child can keep stdout open after bash exits.
 func newShellCommand(ctx context.Context, command string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	configureShell(cmd)
 	return cmd
 }

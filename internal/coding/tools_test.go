@@ -104,7 +104,7 @@ func TestReadTruncatedUTF8(t *testing.T) {
 
 func TestRunCommand(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("shell test uses sh")
+		t.Skip("shell test uses bash")
 	}
 	ws := openTemp(t)
 	tool := mustTool(t, ws, "run_command")
@@ -116,6 +116,14 @@ func TestRunCommand(t *testing.T) {
 	}
 	if strings.TrimSpace(out) != ws.Root() {
 		t.Fatalf("pwd %q want %s", out, ws.Root())
+	}
+
+	out, err = tool.Execute(ctx, jsonArg(t, map[string]string{"command": "[[ 1 == 1 ]] && echo ok"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Fatalf("bash [[ ]] %q", out)
 	}
 
 	_, err = tool.Execute(ctx, jsonArg(t, map[string]string{"command": "echo nope; exit 3"}))
