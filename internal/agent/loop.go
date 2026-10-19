@@ -37,7 +37,7 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 	if errors.Is(err, context.Canceled) {
 		err = ErrInterrupted
 	}
-	a.emit(Event{Type: AgentEnd, Messages: a.Messages(), Err: err})
+	a.emit(Event{Type: AgentEnd, Err: err})
 	return err
 }
 
@@ -71,17 +71,12 @@ func (a *Agent) run(ctx context.Context) error {
 }
 
 func shouldRunTools(msg ai.Message) bool {
-	if len(msg.ToolCalls) == 0 {
-		return false
-	}
-	switch msg.StopReason {
-	case ai.StopError, ai.StopAborted:
-		return false
-	default:
-		return true
-	}
+	return len(msg.ToolCalls) > 0 && msg.StopReason != ai.StopError
 }
 
+// terminalError surfaces a model failure that produced no text.
+// Text is the answer the user should see, so StopError with text still
+// ends the turn cleanly.
 func terminalError(msg ai.Message) error {
 	if msg.StopReason != ai.StopError {
 		return nil
@@ -101,9 +96,6 @@ func (a *Agent) readAssistant(ctx context.Context) (ai.Message, error) {
 	events, err := a.stream(ctx, a.request())
 	if err != nil {
 		return ai.Message{}, err
-	}
-	if events == nil {
-		return ai.Message{}, errors.New("stream returned no events")
 	}
 
 	started := false
@@ -164,10 +156,11 @@ func (a *Agent) runTools(ctx context.Context, calls []ai.ToolCall) error {
 			a.abortRemaining(calls[i+1:])
 			return err
 		}
-		if err := ctx.Err(); err != nil {
-			a.abortRemaining(calls[i+1:])
-			return err
-		}
+	}
+	// The last tool can cancel ctx and still return nil. The next turn
+	// would otherwise start before Prompt notices.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -178,10 +171,10 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 	if a.before != nil {
 		d, err := a.before(ctx, call)
 		if err != nil {
-			return a.finishHook(call, args, err)
+			return a.finishHook(call, err)
 		}
 		if d.Block {
-			a.blockCall(call, args, d.Reason)
+			a.blockCall(call, d.Reason)
 			return nil
 		}
 		if d.Args != nil {
@@ -198,25 +191,30 @@ func (a *Agent) runOneTool(ctx context.Context, call ai.ToolCall) error {
 // finishHook records the hook error as this call's result.
 // A canceled hook stops the turn. Any other error stays on this call so the
 // model can continue.
-func (a *Agent) finishHook(call ai.ToolCall, args []byte, err error) error {
+func (a *Agent) finishHook(call ai.ToolCall, err error) error {
 	text := err.Error()
 	if errors.Is(err, context.Canceled) {
 		text = "aborted"
 	}
-	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-	a.appendResult(call, text, true)
+	a.skipCall(call, text)
 	if errors.Is(err, context.Canceled) {
 		return context.Canceled
 	}
 	return nil
 }
 
-func (a *Agent) blockCall(call ai.ToolCall, args []byte, reason string) {
+func (a *Agent) blockCall(call ai.ToolCall, reason string) {
 	if reason == "" {
 		reason = "blocked"
 	}
+	a.skipCall(call, "blocked: "+reason)
+}
+
+// skipCall pairs a call that will not run with an error result.
+func (a *Agent) skipCall(call ai.ToolCall, text string) {
+	args := normalizeArgs(call.Arguments)
 	a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-	a.appendResult(call, "blocked: "+reason, true)
+	a.appendResult(call, text, true)
 }
 
 // closeCalls records a result for tool calls that will not run.
@@ -239,9 +237,7 @@ func (a *Agent) closeCalls(msg ai.Message) {
 // An assistant message with an unpaired tool call makes the next request invalid.
 func (a *Agent) abortRemaining(calls []ai.ToolCall) {
 	for _, call := range calls {
-		args := normalizeArgs(call.Arguments)
-		a.emit(Event{Type: ToolStart, ToolID: call.ID, ToolName: call.Name, Args: args})
-		a.appendResult(call, "aborted", true)
+		a.skipCall(call, "aborted")
 	}
 }
 
@@ -263,7 +259,7 @@ func (a *Agent) appendResult(call ai.ToolCall, text string, isError bool) {
 
 func (a *Agent) callTool(ctx context.Context, call ai.ToolCall, args []byte) (string, bool) {
 	if !json.Valid(args) {
-		return "invalid tool arguments: " + clip(string(call.Arguments), 200), true
+		return "invalid tool arguments: " + clip(string(call.Arguments), invalidArgRunes), true
 	}
 	tool, ok := a.state.tool(call.Name)
 	if !ok {
@@ -289,6 +285,8 @@ func normalizeArgs(raw []byte) []byte {
 	}
 	return raw
 }
+
+const invalidArgRunes = 200
 
 func clip(s string, n int) string {
 	r := []rune(s)
