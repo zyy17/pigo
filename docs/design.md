@@ -66,6 +66,57 @@ If that message has tool calls, each call is executed and paired with a `toolRes
 
 The turn limit is 25 model calls.
 
+## Dangerous commands
+
+The agent core does not decide which commands are safe. `BeforeToolCall` runs after the model asks for a tool and before `Execute`. The hook can allow the call, block it, or replace its arguments. A blocked call still gets a tool result, so the turn continues and the model can adapt.
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Hook
+    participant Tools
+    participant Model
+    Agent->>Model: transcript
+    Model-->>Agent: tool call
+    Agent->>Hook: BeforeToolCall
+    alt blocked
+        Hook-->>Agent: reason
+        Agent-->>Model: tool result, blocked
+    else allowed
+        Hook-->>Agent: allow
+        Agent->>Tools: execute
+        Tools-->>Agent: result
+        Agent-->>Model: tool result
+    end
+```
+
+`internal/coding` is the only place that names dangerous shell commands. It matches `run_command` against a short denylist:
+
+- `rm -rf` of `/`, `~`, or `$HOME`
+- `sudo`
+- `mkfs`
+- `dd` writing to a disk device (`of=/dev/sd*`, and `nvme`, `hd`, `mmcblk`, `xvd`, `vd`)
+- `git push --force`, including `-f`
+- `curl` or `wget` piped into a shell
+- a fork bomb
+- `chmod -R 777 /`
+- a redirect onto those disk devices
+
+`rm -rf ./build` and `git push --force-with-lease` are not on the list.
+
+In the interactive chat, a match replaces the working row with a confirm prompt:
+
+```text
+! allow this command?
+rm -rf /
+recursive delete of / or home
+enter allow · esc deny
+```
+
+Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips the check.
+
+This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
+
 ## Tests
 
 `go test ./...` runs the unit tests and the hermetic end-to-end tests in `e2e`. Those tests open an `httptest` server that streams OpenAI-compatible events, including tool calls, and drive `coding.Session`, `pigo -p`, and the Bubble Tea model. `go test -tags e2e ./e2e/live` (`make e2e`) runs the same kind of task against a real model and skips when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. CI runs the hermetic suite on every push and pull request. The live job runs on `main`, on manual dispatch, and on pull requests from this repository, and it skips when the repository secrets are missing.
@@ -74,9 +125,9 @@ The turn limit is 25 model calls.
 
 `internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it.
 
-Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`), then flags. Blank values are skipped. The CLI is Cobra: `pigo` opens the chat, and `-p` / `--print` runs one prompt.
+Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`), then flags. Blank values are skipped. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, and `--yolo` skips the dangerous-command check.
 
-The chat screen stays in `internal/cli`. It does not use the alternate screen. The wordmark, a bordered session card, and finished turns are printed into the terminal scrollback with one blank line between cells. The view redraws only the streaming reply, the working row, the gray input bar, and a one-line footer. A blank line sits above the footer, and the working row has one blank line above it and one below it. Enter commits the user line to the scrollback and clears the composer. While the turn runs, the working row above the input shows a spinner, the elapsed time, and `esc to interrupt`. Startup leaves one blank line before the wordmark. Shift+Enter inserts a newline when the terminal can report it; Ctrl+J, Alt+Enter, and a trailing backslash do that everywhere. Assistant prose is pale yellow `#E8D9A8`. Inline code, headings, and links are cyan, diff lines are green and red, the `Ran` header is bold, and tool previews are dim. Text wraps to the terminal width. `Agent.Prompt` still only receives the text.
+The chat screen stays in `internal/cli`. It does not use the alternate screen. The wordmark, a bordered session card, and finished turns are printed into the terminal scrollback with one blank line between cells. The view redraws only the streaming reply, the working row, the gray input bar, and a one-line footer. A blank line sits above the footer, and the working row has one blank line above it and one below it. Enter commits the user line to the scrollback and clears the composer. While the turn runs, the working row above the input shows a spinner, the elapsed time, and `esc to interrupt`. A dangerous shell command replaces that row with a confirm prompt until Enter or Esc. Startup leaves one blank line before the wordmark. Shift+Enter inserts a newline when the terminal can report it; Ctrl+J, Alt+Enter, and a trailing backslash do that everywhere. Assistant prose is pale yellow `#E8D9A8`. Inline code, headings, and links are cyan, diff lines are green and red, the `Ran` header is bold, and tool previews are dim. Text wraps to the terminal width. `Agent.Prompt` still only receives the text.
 
 ## Tools and the workspace
 
@@ -84,7 +135,7 @@ The chat screen stays in `internal/cli`. It does not use the alternate screen. T
 
 `read_file` has one extra allowance. After the workspace check fails, it may still open a file inside a discovered skill directory. That is how a skill in `~/.pi/agent/skills` can be loaded. `write_file` and `edit_file` do not get that allowance.
 
-`run_command` starts a shell whose working directory is the workspace. The shell is an ordinary process. `OPENAI_API_KEY` is removed from its environment.
+`run_command` starts a shell whose working directory is the workspace. The shell is an ordinary process. `OPENAI_API_KEY` is removed from its environment. The denylist in [Dangerous commands](#dangerous-commands) can block the command before that process starts.
 
 ## Skills
 

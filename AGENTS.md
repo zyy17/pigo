@@ -19,6 +19,8 @@ It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Pref
 | `internal/config` | Flat settings load (koanf) | Agent/AI/coding packages |
 | `internal/cli` | Cobra, TUI, `/skill:name`, wiring | Path confinement and wire encoding |
 
+`BeforeToolCall` is the only core extension on a tool call. Bash denylist rules live in `internal/coding`. The TUI owns the confirm prompt. The agent core has no safety policy.
+
 Skills are not a new agent type. Discovery feeds the system prompt (name, description, path). `/skill:name` becomes an ordinary user message before `Prompt`. The loop still only sees messages and tools.
 
 Reuse Pi coding-agent system prompt sections where we already do. Do not invent a parallel prompt architecture.
@@ -35,7 +37,7 @@ Reuse Pi coding-agent system prompt sections where we already do. Do not invent 
 ## CLI, config, TUI
 
 - CLI: **Cobra**. Interactive chat is the default; `-p` / `--print` stays non-interactive.
-- Config: **koanf**, one flat struct (`provider`, `api_key`, `base_url`, `model`, `workspace`). Precedence: flags > environment > `.env` > `./pigo.yaml` > `~/.pigo/config.yaml` > defaults. Keep `PIGO_PROVIDER` and `OPENAI_*` working. No API-key flag (avoid shell history).
+- Config: **koanf**, one flat struct (`provider`, `api_key`, `base_url`, `model`, `workspace`, `yolo`). Precedence: flags > environment > `.env` > `./pigo.yaml` > `~/.pigo/config.yaml` > defaults. Keep `PIGO_PROVIDER`, `OPENAI_*`, and `PIGO_YOLO` working. No API-key flag (avoid shell history). A false `--yolo` does not clear `yolo: true` from a file.
 - Only `internal/cli` and `internal/config` may import Cobra or koanf.
 - TUI: Bubble Tea + lipgloss, Codex-like calm chat (banner, `>` prompt, gray input bar, assistant bullet, `• Ran` tool lines, a working row (one blank line above and below) with spinner, elapsed time, and `esc to interrupt`). No alternate screen: finished turns are printed into the terminal scrollback (`tea.Println`); the view redraws only the streaming reply, the working row, the input, and a single-line footer. Enter sends and clears the composer. Shift+Enter inserts a newline where the terminal reports it; Ctrl+J, Alt+Enter, and a trailing `\` do so everywhere. Wrap to the terminal width (CJK-aware). The input, streaming reply, and footer follow a resize; lines already in the scrollback stay as printed. Startup prints one blank line, then the pigo ASCII wordmark (logo colors: Go cyan `#00ADD8`, coral `#F09082`, gold `#F1BE58`). Study charmbracelet/crush for patterns; do not vendor crush.
 - `/skill:name`, `/reset`, `/exit`, and Ctrl-C abort-turn behavior stay.
