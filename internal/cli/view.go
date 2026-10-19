@@ -8,7 +8,7 @@
 package cli
 
 import (
-	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -38,7 +38,7 @@ func (m chatModel) View() tea.View {
 }
 
 // layout is the frame and the caret cell inside it. y counts from the top.
-func (m chatModel) layout() (body string, x, y int) {
+func (m *chatModel) layout() (body string, x, y int) {
 	// Quit and the first paint send an empty frame. The alternate screen
 	// stays on, so shutdown restores the shell instead of erasing it.
 	if !m.ready || m.quitting {
@@ -51,11 +51,7 @@ func (m chatModel) layout() (body string, x, y int) {
 	y = stackHeight(head) + stackHeight(above) + cy
 	body = strings.Join(append(head, bottom...), "\n")
 	body, dropped := fitHeightDrop(body, m.height)
-	y -= dropped
-	if y < 0 {
-		y = 0
-	}
-	return body, x, y
+	return body, x, max(y-dropped, 0)
 }
 
 // joinChrome is the fixed band under the transcript: chrome, composer,
@@ -67,15 +63,11 @@ func joinChrome(above []string, input, footer string) []string {
 }
 
 func roomFor(height int, parts []string) int {
-	room := height - stackHeight(parts)
-	if room < 0 {
-		return 0
-	}
-	return room
+	return max(height-stackHeight(parts), 0)
 }
 
 // chromeAbove is the fixed band between the transcript and the composer.
-func (m chatModel) chromeAbove() []string {
+func (m *chatModel) chromeAbove() []string {
 	above := []string{""} // blank line under the transcript
 	if panel := m.confirmView(); panel != "" {
 		// The confirm panel takes the working-row slot. Esc denies the
@@ -90,13 +82,13 @@ func (m chatModel) chromeAbove() []string {
 	return above
 }
 
-func (m chatModel) footer() string {
+func (m *chatModel) footer() string {
 	return styleFooter(m.statusWord(), m.modelName, m.root, m.width)
 }
 
 // workingRow is the activity line above the composer: spinner, elapsed time,
 // and the key that stops the turn.
-func (m chatModel) workingRow() string {
+func (m *chatModel) workingRow() string {
 	if !m.busy {
 		return ""
 	}
@@ -113,7 +105,7 @@ func (m chatModel) workingRow() string {
 	return line
 }
 
-func (m chatModel) statusWord() string {
+func (m *chatModel) statusWord() string {
 	if m.busy {
 		return "working"
 	}
@@ -126,14 +118,6 @@ func (m chatModel) statusWord() string {
 // footerHints uses the same interrupt key as the working row. Esc stops a
 // running turn. Ctrl-C also stops it, and quits when the turn is idle.
 const footerHints = "enter send · shift+enter newline · esc to interrupt · /exit"
-
-func composeFooter(state, model, root string, width int) string {
-	left, right := footerSides(state, model, root, width)
-	if right == "" {
-		return left
-	}
-	return left + " · " + right
-}
 
 func styleFooter(state, model, root string, width int) string {
 	left, right := footerSides(state, model, root, width)
@@ -170,7 +154,7 @@ func footerSides(state, model, root string, width int) (string, string) {
 	return left, right
 }
 
-func (m chatModel) renderBlock(b block) string {
+func (m *chatModel) renderBlock(b block) string {
 	switch b.kind {
 	case kindUser:
 		return m.paintUser(b.text)
@@ -192,7 +176,7 @@ func (m chatModel) renderBlock(b block) string {
 }
 
 // workedRule is the dim separator under a finished turn.
-func (m chatModel) workedRule(label string) string {
+func (m *chatModel) workedRule(label string) string {
 	width := m.width
 	lead := "─ " + label + " "
 	if ansi.StringWidth(lead) >= width {
@@ -202,7 +186,7 @@ func (m chatModel) workedRule(label string) string {
 	return dimStyle.Render(rule)
 }
 
-func (m chatModel) paintUser(text string) string {
+func (m *chatModel) paintUser(text string) string {
 	width := m.width
 	lines := strings.Split(wrapText(text, textCols(width)), "\n")
 	var b strings.Builder
@@ -222,7 +206,7 @@ func (m chatModel) paintUser(text string) string {
 	return b.String()
 }
 
-func (m chatModel) paintAssistant(text string) string {
+func (m *chatModel) paintAssistant(text string) string {
 	width := m.width
 	lines := strings.Split(styleProse(wrapText(text, textCols(width))), "\n")
 	for i, line := range lines {
@@ -237,13 +221,10 @@ func (m chatModel) paintAssistant(text string) string {
 
 // textCols is the width inside the "> " / "• " gutter.
 func textCols(width int) int {
-	if width < gutterCols+1 {
-		return 1
-	}
-	return width - gutterCols
+	return max(width-gutterCols, 1)
 }
 
-func (m chatModel) paintLines(text string, style lipgloss.Style) string {
+func (m *chatModel) paintLines(text string, style lipgloss.Style) string {
 	width := m.width
 	lines := strings.Split(text, "\n")
 	var b strings.Builder
@@ -254,18 +235,6 @@ func (m chatModel) paintLines(text string, style lipgloss.Style) string {
 		b.WriteString(style.Render(wrapText(line, width)))
 	}
 	return b.String()
-}
-
-func ranTitle(name string, args []byte) string {
-	var fields map[string]any
-	_ = json.Unmarshal(args, &fields)
-	if cmd, _ := fields["command"].(string); cmd != "" {
-		return "• Ran " + oneLine(cmd)
-	}
-	if path, _ := fields["path"].(string); path != "" {
-		return "• Ran " + name + " " + path
-	}
-	return "• Ran " + name
 }
 
 func toolPreview(result string) string {
@@ -319,25 +288,14 @@ func fmtElapsed(d time.Duration) string {
 		d = 0
 	}
 	s := int(d.Seconds())
-	if s < minuteSeconds {
-		return strconv.Itoa(s) + "s"
+	switch {
+	case s < 60:
+		return fmt.Sprintf("%ds", s)
+	case s < 3600:
+		return fmt.Sprintf("%dm %02ds", s/60, s%60)
+	default:
+		return fmt.Sprintf("%dh %02dm %02ds", s/3600, (s%3600)/60, s%60)
 	}
-	if s < hourSeconds {
-		return strconv.Itoa(s/minuteSeconds) + "m " + twoDigits(s%minuteSeconds) + "s"
-	}
-	return strconv.Itoa(s/hourSeconds) + "h " + twoDigits((s%hourSeconds)/minuteSeconds) + "m " + twoDigits(s%minuteSeconds) + "s"
-}
-
-const (
-	minuteSeconds = 60
-	hourSeconds   = 3600
-)
-
-func twoDigits(n int) string {
-	if n < 10 {
-		return "0" + strconv.Itoa(n)
-	}
-	return strconv.Itoa(n)
 }
 
 func fitHeightDrop(s string, height int) (string, int) {

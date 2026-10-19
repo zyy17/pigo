@@ -20,25 +20,23 @@ const (
 	followTail = -1
 )
 
-func (m chatModel) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+func (m *chatModel) onWheel(msg tea.MouseWheelMsg) {
 	switch msg.Button {
 	case tea.MouseWheelUp:
-		return m.scrollRows(-wheelRows), nil
+		m.scrollRows(-wheelRows)
 	case tea.MouseWheelDown:
-		return m.scrollRows(wheelRows), nil
-	default:
-		return m, nil
+		m.scrollRows(wheelRows)
 	}
 }
 
-func (m chatModel) transcriptRows() int {
+func (m *chatModel) transcriptRows() int {
 	input, _, _ := m.inputBlock()
 	return roomFor(m.height, joinChrome(m.chromeAbove(), input, m.footer()))
 }
 
 // transcriptWindow is the visible slice of the transcript. Short history
 // stays at the top of that slice; the spare rows sit above the composer.
-func (m chatModel) transcriptWindow(room int) []string {
+func (m *chatModel) transcriptWindow(room int) []string {
 	if room <= 0 {
 		return nil
 	}
@@ -58,7 +56,7 @@ func (m chatModel) transcriptWindow(room int) []string {
 	return window
 }
 
-func (m chatModel) viewTop(n, room int) int {
+func (m *chatModel) viewTop(n, room int) int {
 	maxStart := max(n-room, 0)
 	if m.scroll < 0 {
 		return maxStart
@@ -67,54 +65,45 @@ func (m chatModel) viewTop(n, room int) int {
 }
 
 // scrollRows moves the transcript. Negative rows go toward older lines.
-func (m chatModel) scrollRows(rows int) chatModel {
+// The next line is viewTop plus the delta, so the tail limit is computed once.
+func (m *chatModel) scrollRows(rows int) {
 	if rows == 0 || !m.ready {
-		return m
+		return
 	}
 	n := len(m.historyLines())
 	room := m.transcriptRows()
-	maxStart := n - room
+	maxStart := max(n-room, 0)
 	if maxStart < 1 {
 		m.scroll = followTail
-		return m
+		return
 	}
-	start := maxStart
-	if m.scroll >= 0 {
-		start = min(max(m.scroll, 0), maxStart)
-	}
-	next := start + rows
+	next := m.viewTop(n, room) + rows
 	if next >= maxStart {
 		m.scroll = followTail
-		return m
+		return
 	}
 	m.scroll = max(next, 0)
-	return m
 }
 
 // pageRows is one viewport minus a one-line overlap, matching Codex.
-func (m chatModel) pageRows() int {
-	page := m.transcriptRows() - pageOverlap
-	if page < 1 {
-		return 1
-	}
-	return page
+func (m *chatModel) pageRows() int {
+	return max(m.transcriptRows()-pageOverlap, 1)
 }
 
-func (m chatModel) canReturn() bool {
-	if m.scroll < 0 || !m.ready {
+func (m *chatModel) canReturn() bool {
+	if !m.ready {
 		return false
 	}
 	n := len(m.historyLines())
 	room := m.transcriptRows()
-	maxStart := n - room
-	return maxStart > 0 && m.scroll < maxStart
+	return m.scroll >= 0 && m.scroll < max(n-room, 0)
 }
 
-func (m chatModel) transcript() string {
+func (m *chatModel) transcript() string {
 	return strings.Join(m.historyParts(false), "\n\n")
 }
 
-func (m chatModel) historyLines() []string {
+func (m *chatModel) historyLines() []string {
 	text := strings.Join(m.historyParts(true), "\n\n")
 	if text == "" {
 		return nil
@@ -122,7 +111,7 @@ func (m chatModel) historyLines() []string {
 	return strings.Split(text, "\n")
 }
 
-func (m chatModel) historyParts(includeLive bool) []string {
+func (m *chatModel) historyParts(includeLive bool) []string {
 	parts := make([]string, 0, len(m.blocks)+2)
 	if m.ready {
 		if opening := m.opening(); opening != "" {

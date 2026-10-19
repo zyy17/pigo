@@ -14,22 +14,24 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func (m chatModel) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *chatModel) onKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+c":
 		return m.onInterrupt()
 	case "ctrl+d":
 		if !m.busy && strings.TrimSpace(m.comp.text()) == "" {
 			m.quitting = true
-			return m, tea.Quit
+			return tea.Quit
 		}
 	}
 	if !msg.Mod.Contains(tea.ModAlt) {
 		switch msg.Code {
 		case tea.KeyPgUp:
-			return m.scrollRows(-m.pageRows()), nil
+			m.scrollRows(-m.pageRows())
+			return nil
 		case tea.KeyPgDown:
-			return m.scrollRows(m.pageRows()), nil
+			m.scrollRows(m.pageRows())
+			return nil
 		}
 	}
 	if m.ask != nil {
@@ -41,30 +43,30 @@ func (m chatModel) onKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) {
 			m.session.Abort()
 		}
-		return m, nil
+		return nil
 	}
 	// Esc returns a paused transcript to the tail. The slash menu owns
 	// Esc before this, and a running turn already used it to interrupt.
 	if msg.Code == tea.KeyEsc && !msg.Mod.Contains(tea.ModAlt) && !m.menuOpen() && m.canReturn() {
 		m.scroll = followTail
-		return m, nil
+		return nil
 	}
 	return m.onComposer(msg)
 }
 
-func (m chatModel) onInterrupt() (tea.Model, tea.Cmd) {
+func (m *chatModel) onInterrupt() tea.Cmd {
 	if m.ask != nil {
-		m = m.finishConfirm(false)
+		m.finishConfirm(false)
 	}
 	if m.busy {
 		m.session.Abort()
-		return m, nil
+		return nil
 	}
 	m.quitting = true
-	return m, tea.Quit
+	return tea.Quit
 }
 
-func (m chatModel) onComposer(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *chatModel) onComposer(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.Code == tea.KeyEnter || msg.Code == tea.KeyKpEnter {
 		if msg.Mod.Contains(tea.ModShift) || msg.Mod.Contains(tea.ModAlt) {
 			return m.newline()
@@ -78,76 +80,76 @@ func (m chatModel) onComposer(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.menuOpen() {
 			m.completeSuggest()
 		}
-		return m, nil
+		return nil
 	case "esc":
 		m.suggestDismissed = true
-		return m, nil
+		return nil
 	case "up":
 		if m.menuOpen() {
 			m.moveSuggest(-1)
 		}
-		return m, nil
+		return nil
 	case "down":
 		if m.menuOpen() {
 			m.moveSuggest(1)
 		}
-		return m, nil
+		return nil
 	case "backspace":
 		m.comp.backspace()
 		m.noteTyped()
-		return m, nil
+		return nil
 	case "delete":
 		m.comp.del()
 		m.noteTyped()
-		return m, nil
+		return nil
 	case "left", "ctrl+b":
 		m.comp.left()
-		return m, nil
+		return nil
 	case "right", "ctrl+f":
 		m.comp.right()
-		return m, nil
+		return nil
 	case "home", "ctrl+a":
 		m.comp.home()
-		return m, nil
+		return nil
 	case "end", "ctrl+e":
 		m.comp.end()
-		return m, nil
+		return nil
 	case "ctrl+u":
 		m.comp.clear()
 		m.noteTyped()
-		return m, nil
+		return nil
 	case "ctrl+w":
 		m.comp.wordBack()
 		m.noteTyped()
-		return m, nil
+		return nil
 	case "space":
 		m.comp.insert(" ")
 		m.noteTyped()
-		return m, nil
+		return nil
 	default:
 		if msg.Text != "" && !msg.Mod.Contains(tea.ModCtrl) {
 			m.comp.insert(msg.Text)
 			m.noteTyped()
 		}
-		return m, nil
+		return nil
 	}
 }
 
-func (m chatModel) newline() (tea.Model, tea.Cmd) {
+func (m *chatModel) newline() tea.Cmd {
 	m.comp.insert("\n")
 	m.noteTyped()
-	return m, nil
+	return nil
 }
 
-func (m chatModel) onEnter() (tea.Model, tea.Cmd) {
+func (m *chatModel) onEnter() tea.Cmd {
 	if m.menuOpen() && partialCommand(m.comp.text(), m.matches()) {
 		m.completeSuggest()
-		return m, nil
+		return nil
 	}
 	if next, ok := continuedLine(m.comp.text()); ok {
 		m.comp.set(next)
 		m.noteTyped()
-		return m, nil
+		return nil
 	}
 	return m.submit(strings.TrimSpace(m.comp.text()))
 }

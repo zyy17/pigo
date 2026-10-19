@@ -45,7 +45,7 @@ func wordmark() string {
 	return b.String()
 }
 
-func (m chatModel) opening() string {
+func (m *chatModel) opening() string {
 	var parts []string
 	mark := m.height >= wordmarkMinHeight && m.width >= wordmarkCols()
 	if mark {
@@ -74,13 +74,12 @@ func wordmarkCols() int {
 	return n
 }
 
-func (m chatModel) hintLine() string {
-	hint := "/skill:name loads a skill. /reset clears the chat. /exit quits."
-	return dimStyle.Render(wrapText(hint, m.width))
+func (m *chatModel) hintLine() string {
+	return dimStyle.Render(wrapText(hintText(), m.width))
 }
 
 // sessionCard is the bordered session line: version, model, and directory.
-func (m chatModel) sessionCard() string {
+func (m *chatModel) sessionCard() string {
 	width := m.width
 	title := "pigo " + version
 	meta := sessionMeta(m.modelName, m.root)

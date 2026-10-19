@@ -12,12 +12,8 @@ func placeCursor(v *tea.View, x, y int, show bool) {
 	if !show {
 		return
 	}
-	if x < 0 {
-		x = 0
-	}
-	if y < 0 {
-		y = 0
-	}
+	x = max(x, 0)
+	y = max(y, 0)
 	cur := tea.NewCursor(x, y)
 	cur.Shape = tea.CursorBar
 	cur.Blink = false
