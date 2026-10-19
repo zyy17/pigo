@@ -14,8 +14,6 @@ const (
 	wordmarkMinHeight = 22
 	cardMinWidth      = 12
 	cardFallbackWidth = 80
-	cardBorderCols    = 2
-	cardPadCols       = 2
 )
 
 // mark is the pigo wordmark. Columns are p, i, g, o. Four rows, strokes
@@ -99,15 +97,11 @@ func (m chatModel) sessionCard() string {
 		}
 		return title + "\n" + meta
 	}
-	inner := width - cardBorderCols
-	top := cardBorderStyle.Render("╭" + strings.Repeat("─", inner) + "╮")
-	bot := cardBorderStyle.Render("╰" + strings.Repeat("─", inner) + "╯")
-	lines := []string{top, cardRow(title, false, inner)}
+	body := title
 	if meta != "" {
-		lines = append(lines, cardRow(meta, true, inner))
+		body += "\n" + dimStyle.Render(meta)
 	}
-	lines = append(lines, bot)
-	return strings.Join(lines, "\n")
+	return cardStyle.Width(width).Render(body)
 }
 
 func sessionMeta(model, root string) string {
@@ -121,21 +115,4 @@ func sessionMeta(model, root string) string {
 	default:
 		return root
 	}
-}
-
-func cardRow(text string, dim bool, inner int) string {
-	room := inner - cardPadCols
-	if room < 1 {
-		room = 1
-	}
-	text = oneLine(text)
-	if ansi.StringWidth(text) > room {
-		text = ansi.Truncate(text, room, "…")
-	}
-	pad := room - ansi.StringWidth(text)
-	shown := text + strings.Repeat(" ", pad)
-	if dim {
-		shown = dimStyle.Render(shown)
-	}
-	return cardBorderStyle.Render("│ ") + shown + cardBorderStyle.Render(" │")
 }
