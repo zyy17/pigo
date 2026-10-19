@@ -148,7 +148,7 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 | `PIGO_PROVIDER` | 聊天后端。`openai` 表示兼容 OpenAI 的 chat-completions 接口 | `openai` |
 | `OPENAI_API_KEY` | 提供者是 `openai` 时的令牌 | 必填 |
 | `OPENAI_BASE_URL` | 该提供者的 API 根，通常以 `/v1` 结尾 | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-4o-mini` |
+| `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-5.6-luna` |
 | `PIGO_YOLO` | 设为 `1` 或 `true` 时，危险 shell 命令不再询问 | 关闭 |
 
 `--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）和 `--yolo` 覆盖环境变量。API 密钥不做成命令行参数，避免进 shell 历史。
@@ -159,7 +159,7 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 provider: openai
 api_key: sk-...
 base_url: https://api.openai.com/v1
-model: gpt-4o-mini
+model: gpt-5.6-luna
 workspace: .
 ```
 
