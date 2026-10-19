@@ -370,6 +370,13 @@ func TestCaretStaysInTheInput(t *testing.T) {
 	}
 }
 
+func TestToolPreviewKeepsTextAfterCarriageReturn(t *testing.T) {
+	got := toolPreview("50%\r100%")
+	if !strings.Contains(got, "└ 100%") || strings.Contains(got, "50%") {
+		t.Fatalf("preview %q", got)
+	}
+}
+
 func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 	src := strings.Repeat("我们", 30)
 	got := wrapText(src, 10)
