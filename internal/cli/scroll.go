@@ -4,6 +4,7 @@
 // to the latest line. Paging up sets a line; landing on the tail follows
 // again, so the next output sticks to the bottom. The offset is a wrapped
 // line, not a source message, so a resize can drift it.
+
 package cli
 
 import (

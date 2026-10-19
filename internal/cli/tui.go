@@ -3,6 +3,7 @@
 // runTUI is the only entry. Update routes terminal messages; apply folds
 // agent events into the transcript. Keys live in keys.go, the frame in
 // view.go, the composer in input.go, and scrolling in scroll.go.
+
 package cli
 
 import (

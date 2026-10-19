@@ -3,6 +3,7 @@
 // Bubble Tea v2 places it from the view. The position is a cell in the
 // frame, origin at the top left. A steady bar sits in the gap before the
 // next cell, which is where an IME candidate window anchors.
+
 package cli
 
 import tea "charm.land/bubbletea/v2"

@@ -1,4 +1,5 @@
 // Lipgloss styles for the chat screen. Keep new colors here.
+
 package cli
 
 import "charm.land/lipgloss/v2"

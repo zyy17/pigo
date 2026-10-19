@@ -2,6 +2,7 @@
 //
 // The caret cell is returned with the bar so the view can place the
 // hardware cursor there. Wide characters count as two columns.
+
 package cli
 
 import (

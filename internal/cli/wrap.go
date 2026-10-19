@@ -3,6 +3,7 @@
 // Wide characters (CJK) count as two columns. Spaces break first; a token
 // wider than the line is hard-wrapped. The composer uses wrapRunes so the
 // caret stays on the same rune after a wrap.
+
 package cli
 
 import "github.com/charmbracelet/x/ansi"
