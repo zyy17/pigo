@@ -130,7 +130,7 @@ func envMap() map[string]any {
 
 func yoloOn(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "1", "true", "yes":
+	case "1", "true":
 		return true
 	default:
 		return false
@@ -144,8 +144,6 @@ func flagMap(flags Config) map[string]any {
 			out[name] = v
 		}
 	}
-	put("provider", flags.Provider)
-	put("api_key", flags.APIKey)
 	put("base_url", flags.BaseURL)
 	put("model", flags.Model)
 	put("workspace", flags.Workspace)

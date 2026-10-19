@@ -54,7 +54,7 @@ func New(cfg Config) (*Session, error) {
 		userDir = skills.DefaultUserDir()
 	}
 	found := skills.Discover(ws.Root(), userDir)
-	// The hook closes over this session so Confirm can be set after New.
+	// The hook closes over this session so SetConfirm can be called after New.
 	session := &Session{
 		root:   ws.Root(),
 		model:  cfg.Model,

@@ -22,7 +22,6 @@ const (
 	StopToolUse StopReason = "toolUse"
 	StopLength  StopReason = "length"
 	StopError   StopReason = "error"
-	StopAborted StopReason = "aborted"
 )
 
 // ToolCall is one function call the model asked for.
