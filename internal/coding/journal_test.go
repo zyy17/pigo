@@ -566,6 +566,51 @@ func TestContinueKeepsATornNewestSession(t *testing.T) {
 	}
 }
 
+func TestContinueBreaksEqualMtimeByHeaderTime(t *testing.T) {
+	dir := t.TempDir()
+	sessions := t.TempDir()
+	ws := openPersisted(t, dir, sessions, "", &scripted{})
+	root := ws.Root()
+	ws.closeJournal()
+	bucket := sessionBucket(sessions, root)
+	if err := os.MkdirAll(bucket, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, id, stamp, text string) {
+		t.Helper()
+		body := strings.Join([]string{
+			`{"type":"session","version":3,"id":"` + id + `","timestamp":"` + stamp + `","cwd":"` + jsonEscape(root) + `"}`,
+			`{"type":"message","id":"u","parentId":null,"timestamp":"` + stamp + `","message":{"role":"user","content":"` + text + `","timestamp":1}}`,
+			"",
+		}, "\n")
+		if err := os.WriteFile(filepath.Join(bucket, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The later session has the smaller path, so a path tie-break would open the older one.
+	write("z-older.jsonl", "older-session", "2026-10-19T00:00:00.000Z", "from older")
+	write("a-newer.jsonl", "newer-session", "2026-10-19T00:00:01.000Z", "from newer")
+	now := time.Now()
+	for _, name := range []string{"z-older.jsonl", "a-newer.jsonl"} {
+		path := filepath.Join(bucket, name)
+		if err := os.Chtimes(path, now, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opened := openPersisted(t, dir, sessions, ResumeLatest, &scripted{})
+	if opened.SessionID() != "newer-session" || !containsText(opened.Messages(), "from newer") {
+		t.Fatalf("continue %s %s", opened.SessionID(), roleTexts(opened.Messages()))
+	}
+}
+
+func TestSessionStampsMoveForward(t *testing.T) {
+	a := nextStamp()
+	b := nextStamp()
+	if !b.After(a) {
+		t.Fatalf("%s then %s", isoTime(a), isoTime(b))
+	}
+}
+
 func TestSessionsStayInsideTheWorkspaceBucket(t *testing.T) {
 	sessions := t.TempDir()
 	left := openPersisted(t, t.TempDir(), sessions, "", &scripted{msgs: []ai.Message{ai.Assistant("L", ai.StopStop)}})
