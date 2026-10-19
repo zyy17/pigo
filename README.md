@@ -11,11 +11,11 @@ pigo is a small Go coding agent. It chats with an OpenAI-compatible model, runs 
 ```mermaid
 flowchart TD
     cli["CLI session"]
-    coding["internal/coding<br/>Pi pi-coding-agent"]
+    coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
-    agent["internal/agent<br/>Pi pi-agent-core"]
-    ai["internal/ai<br/>Pi pi-ai"]
-    http["OpenAI-compatible HTTP"]
+    agent["internal/agent<br/>pi-agent-core"]
+    ai["internal/ai<br/>pi-ai"]
+    http["OpenAI<br/>HTTP"]
     cli --> coding
     coding --> skills
     coding --> agent
@@ -45,8 +45,8 @@ sequenceDiagram
     participant Model
     participant Tools
     User->>Agent: prompt
-    loop until the model stops
-        Agent->>Model: system prompt, transcript, tool schemas
+    loop until stop
+        Agent->>Model: prompt and tools
         Model-->>Agent: assistant message
         Agent->>Tools: tool calls
         Tools-->>Agent: tool results

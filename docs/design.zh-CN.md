@@ -13,7 +13,7 @@ flowchart TD
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
-    http["兼容 OpenAI 的 HTTP"]
+    http["OpenAI<br/>HTTP"]
     cli --> coding
     coding --> skills
     coding --> agent
@@ -49,12 +49,12 @@ sequenceDiagram
     participant Model as 模型
     participant Tools as 工具
     User->>Agent: 提示
-    loop 每一圈一次模型调用
-        Agent->>Model: 系统提示、会话记录、工具 schema
-        Model-->>Agent: 助手消息
-        alt 有工具调用
+    loop 一次
+        Agent->>Model: 记录
+        Model-->>Agent: 消息
+        alt 工具调用
             Agent->>Tools: 一次调用
-            Tools-->>Agent: 一条带同一调用 ID 的结果
+            Tools-->>Agent: 结果
         end
     end
     Agent-->>User: 最终文本
@@ -81,7 +81,7 @@ sequenceDiagram
     Agent->>Hook: BeforeToolCall
     alt 拦截
         Hook-->>Agent: 原因
-        Agent-->>Model: 工具结果，已拦截
+        Agent-->>Model: 已拦截
     else 放行
         Hook-->>Agent: 放行
         Agent->>Tools: 执行
@@ -145,13 +145,13 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 ```mermaid
 flowchart TD
-    start["会话开始"]
-    userDir["扫描 ~/.pi/agent/skills"]
-    projectDir["扫描 工作区/.pi/skills"]
-    list["每个名字保留第一个技能"]
-    prompt["系统提示列出名称、描述和路径"]
-    read["任务匹配时模型调用 read_file"]
-    command["/skill:name 把 SKILL.md 贴进用户消息"]
+    start["开始"]
+    userDir["用户技能<br/>~/.pi/agent/skills"]
+    projectDir["项目技能<br/>.pi/skills"]
+    list["同名<br/>留首"]
+    prompt["系统<br/>提示"]
+    read["read_file"]
+    command["/skill:name"]
     start --> userDir --> projectDir --> list --> prompt
     prompt --> read
     prompt --> command

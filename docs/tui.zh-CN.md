@@ -10,14 +10,14 @@
 
 ```mermaid
 flowchart TD
-    update["tui.go 的 Update"]
+    update["Update<br/>tui.go"]
     update --> size["WindowSizeMsg<br/>resize"]
-    update --> tick["spinner.TickMsg"]
+    update --> tick["TickMsg<br/>spinner"]
     update --> stream["streamMsg<br/>apply"]
     update --> ask["confirmMsg<br/>confirm.go"]
-    update --> paste["PasteMsg<br/>写入输入条"]
-    update --> wheel["MouseWheelMsg<br/>scroll.go scrollRows"]
-    update --> key["KeyPressMsg<br/>keys.go onKey"]
+    update --> paste["PasteMsg<br/>粘贴"]
+    update --> wheel["MouseWheelMsg<br/>scroll.go"]
+    update --> key["KeyPressMsg<br/>keys.go"]
 ```
 
 | 职责 | 文件 | 从这里看 |
@@ -42,11 +42,11 @@ flowchart TD
 flowchart TB
     transcript["对话区<br/>scroll.go"]
     gap["空行"]
-    status["工作行或确认面板<br/>view.go、confirm.go"]
-    menu["斜杠菜单，输入 / 时出现<br/>suggest.go"]
+    status["工作行<br/>确认面板<br/>view.go<br/>confirm.go"]
+    menu["斜杠<br/>菜单<br/>suggest.go"]
     composer["输入条<br/>input.go"]
     gap2["空行"]
-    footer["状态栏<br/>view.go footer"]
+    footer["状态栏<br/>view.go"]
     transcript --> gap --> status --> menu --> composer --> gap2 --> footer
 ```
 
@@ -61,13 +61,13 @@ Enter 把输入条写入对话区，清空输入，并调用 `Session.Prompt`。
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Running: Enter 发送
-    Running --> Confirm: 命中拒绝表
-    Confirm --> Running: Enter 或 y 允许
-    Confirm --> Running: Esc 或 n 拒绝
-    Running --> Idle: 这一轮结束
-    Running --> Idle: Esc 或 Ctrl-C 打断
-    Idle --> [*]: /exit、Ctrl-C，或输入条为空时的 Ctrl-D
+    Idle --> Running: 发送
+    Running --> Confirm: 拒绝
+    Confirm --> Running: 允许
+    Confirm --> Running: 拒绝
+    Running --> Idle: 结束
+    Running --> Idle: 打断
+    Idle --> [*]: 退出
 ```
 
 任务进行中的 Esc 调用 `Abort`。确认面板上的 Esc 只拒绝这一条命令，这一轮继续，工具结果是 `blocked:`。Ctrl-C 会先拒绝，再打断。`--yolo` 不会发出 `confirmMsg`。`-p` 和逐行会话直接拒绝，因为它们没有画面可以询问。

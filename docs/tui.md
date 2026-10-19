@@ -10,14 +10,14 @@ The interactive chat is a Bubble Tea v2 program in `internal/cli`. It runs only 
 
 ```mermaid
 flowchart TD
-    update["Update in tui.go"]
+    update["Update<br/>tui.go"]
     update --> size["WindowSizeMsg<br/>resize"]
-    update --> tick["spinner.TickMsg"]
+    update --> tick["TickMsg<br/>spinner"]
     update --> stream["streamMsg<br/>apply"]
     update --> ask["confirmMsg<br/>confirm.go"]
-    update --> paste["PasteMsg<br/>composer insert"]
-    update --> wheel["MouseWheelMsg<br/>scroll.go scrollRows"]
-    update --> key["KeyPressMsg<br/>keys.go onKey"]
+    update --> paste["PasteMsg<br/>insert"]
+    update --> wheel["MouseWheelMsg<br/>scroll.go"]
+    update --> key["KeyPressMsg<br/>keys.go"]
 ```
 
 | Concern | File | Where to start |
@@ -40,13 +40,13 @@ The transcript fills whatever room is left. The band under it stays put: a blank
 
 ```mermaid
 flowchart TB
-    transcript["transcript pane<br/>scroll.go"]
-    gap["blank line"]
-    status["working row or confirm panel<br/>view.go, confirm.go"]
-    menu["slash menu, when / is open<br/>suggest.go"]
+    transcript["transcript<br/>scroll.go"]
+    gap["blank"]
+    status["working row<br/>or confirm<br/>view.go<br/>confirm.go"]
+    menu["slash menu<br/>suggest.go"]
     composer["composer<br/>input.go"]
-    gap2["blank line"]
-    footer["status bar<br/>view.go footer"]
+    gap2["blank"]
+    footer["status bar<br/>view.go"]
     transcript --> gap --> status --> menu --> composer --> gap2 --> footer
 ```
 
@@ -61,13 +61,13 @@ Enter commits the composer, clears it, and calls `Session.Prompt`. Events come b
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Running: Enter sends
-    Running --> Confirm: denylist command
-    Confirm --> Running: Enter or y allows
-    Confirm --> Running: Esc or n denies
-    Running --> Idle: the turn ends
-    Running --> Idle: Esc or Ctrl-C aborts
-    Idle --> [*]: /exit, Ctrl-C, or Ctrl-D on an empty composer
+    Idle --> Running: Enter
+    Running --> Confirm: denylist
+    Confirm --> Running: allow
+    Confirm --> Running: deny
+    Running --> Idle: done
+    Running --> Idle: abort
+    Idle --> [*]: quit
 ```
 
 Esc during a turn calls `Abort`. Esc on the confirm panel only denies that command; the turn continues and the tool result is `blocked:`. Ctrl-C denies on the way out and aborts. `--yolo` never sends `confirmMsg`. `-p` and the line session deny instead of asking, because they have no screen to ask on.
