@@ -160,10 +160,10 @@ func jsonlLines(data []byte) []jsonlLine {
 // connects, and they do not become transcript messages.
 //
 // The latest compaction entry on that path is returned with the messages.
-// firstKeptEntryId selects the first message the next request sends. The
-// messages themselves stay in the slice. A compaction that is not on the
-// leaf path is ignored. If that id is missing, the kept tail is whatever
-// survived after the compaction entry.
+// firstKeptEntryId selects the kept boundary. The messages themselves stay
+// in the slice. A compaction that is not on the leaf path is ignored. If
+// that id is missing, the kept tail is whatever survived after the
+// compaction entry. The agent pulls a tool-result boundary back to its call.
 //
 // A file with no parentId links is Pi's version 1 shape: file order is the path.
 func transcriptFrom(entries []sessionEntry) ([]ai.Message, []string, *agent.Compaction, string, error) {

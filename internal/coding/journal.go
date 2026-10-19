@@ -38,8 +38,9 @@ type journal struct {
 	file    *os.File
 	ids     map[string]struct{}
 	flushed bool
-	// msgIDs[i] is the file id of agent message i. A compaction entry stores
-	// msgIDs[From], not the agent's in-memory mN name.
+	// msgIDs[i] is the file id of agent message i. An empty string means
+	// that message never landed, so later indexes still match the transcript.
+	// A compaction entry stores msgIDs[From], not the agent's in-memory mN name.
 	msgIDs  []string
 	compact *agent.Compaction
 }
@@ -124,23 +125,35 @@ func (j *journal) append(msg ai.Message, model string) error {
 	switch msg.Role {
 	case ai.RoleUser, ai.RoleAssistant, ai.RoleToolResult:
 	default:
+		j.noteMissing()
 		return nil
 	}
 	entry, err := j.messageEntry(msg, model)
 	if err != nil {
+		j.noteMissing()
 		return err
 	}
 	if !j.flushed {
 		if err := j.create(entry); err != nil {
+			j.noteMissing()
 			return err
 		}
-	} else if err := j.writeLine(entry); err != nil {
-		return err
-	} else {
-		j.leaf = entry.ID
+		j.msgIDs = append(j.msgIDs, entry.ID)
+		return nil
 	}
+	if err := j.writeLine(entry); err != nil {
+		j.noteMissing()
+		return err
+	}
+	j.leaf = entry.ID
 	j.msgIDs = append(j.msgIDs, entry.ID)
 	return nil
+}
+
+// noteMissing keeps msgIDs aligned with the in-memory transcript when a
+// message is not in the file. Compaction indexes this slice by message number.
+func (j *journal) noteMissing() {
+	j.msgIDs = append(j.msgIDs, "")
 }
 
 // appendCompaction writes the summary as the new leaf. The messages it
@@ -157,6 +170,11 @@ func (j *journal) appendCompaction(c *agent.Compaction) error {
 	kept := ""
 	if c.From < len(j.msgIDs) {
 		kept = j.msgIDs[c.From]
+	}
+	// From == len keeps nothing. An empty slot means that message never
+	// landed, so writing the summary would point the leaf at the wrong line.
+	if kept == "" && c.From != len(j.msgIDs) {
+		return fmt.Errorf("compaction kept message %d is not in the session file", c.From)
 	}
 	id, err := j.allocID()
 	if err != nil {
