@@ -1,6 +1,10 @@
 package config
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/zyy17/pigo/internal/skills"
+)
 
 func parseEnvLine(line string) (string, string, bool) {
 	line = strings.TrimSpace(line)
@@ -13,13 +17,7 @@ func parseEnvLine(line string) (string, string, bool) {
 		return "", "", false
 	}
 	key = strings.TrimSpace(key)
-	val = strings.TrimSpace(val)
-	if len(val) >= 2 {
-		quote := val[0]
-		if (quote == '"' || quote == '\'') && val[len(val)-1] == quote {
-			val = val[1 : len(val)-1]
-		}
-	}
+	val = skills.Unquote(strings.TrimSpace(val))
 	if key == "" {
 		return "", "", false
 	}

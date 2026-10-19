@@ -15,7 +15,9 @@ import (
 
 const (
 	defaultBaseURL = "https://api.openai.com/v1"
-	defaultModel   = "gpt-5.6-luna"
+	// defaultModel matches config.DefaultModel. This package does not import
+	// config; New still fills an empty model for direct callers.
+	defaultModel = "gpt-5.6-luna"
 )
 
 // Config selects the model endpoint and the workspace.

@@ -16,6 +16,10 @@ import (
 	"github.com/knadh/koanf/v2"
 )
 
+// DefaultModel is the built-in model name. The CLI help text uses this
+// same constant. coding keeps its own fallback so it does not import config.
+const DefaultModel = "gpt-5.6-luna"
+
 // Config is every setting the CLI needs. Prompt comes from flags only.
 type Config struct {
 	Provider  string `koanf:"provider"`
@@ -49,6 +53,9 @@ func Load(flags Config) (Config, error) {
 	if err := loadFile(k, "pigo.yaml"); err != nil {
 		return Config{}, err
 	}
+	// Snapshot the process environment before .env. loadDotEnv copies .env
+	// into empty process variables for the shell tool. Loading this snapshot
+	// afterwards is what makes a real process value win over .env.
 	env := envMap()
 	if err := loadDotEnv(k, ".env"); err != nil {
 		return Config{}, err
@@ -64,20 +71,25 @@ func Load(flags Config) (Config, error) {
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return Config{}, err
 	}
+	cfg.Prompt = flags.Prompt
+	return cfg.trimmed(), nil
+}
+
+func (cfg Config) trimmed() Config {
 	cfg.Provider = strings.ToLower(strings.TrimSpace(cfg.Provider))
 	cfg.APIKey = strings.TrimSpace(cfg.APIKey)
 	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
 	cfg.Model = strings.TrimSpace(cfg.Model)
 	cfg.Workspace = strings.TrimSpace(cfg.Workspace)
-	cfg.Prompt = strings.TrimSpace(flags.Prompt)
-	return cfg, nil
+	cfg.Prompt = strings.TrimSpace(cfg.Prompt)
+	return cfg
 }
 
 func defaults() map[string]any {
 	return map[string]any{
 		"provider":  "openai",
 		"base_url":  "https://api.openai.com/v1",
-		"model":     "gpt-5.6-luna",
+		"model":     DefaultModel,
 		"workspace": ".",
 	}
 }
