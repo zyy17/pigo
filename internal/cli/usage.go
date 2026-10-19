@@ -13,8 +13,7 @@ func tokenSegment(in, out int) string {
 	return compactTokens(in) + " in · " + compactTokens(out) + " out"
 }
 
-// usageLine is the one line -p and the line session print after a model call
-// that reported usage. The session sum is added only when it differs.
+// usageLine is blank when this call omitted usage. A nil call is not zero tokens.
 func usageLine(call, session *ai.Usage) string {
 	if call == nil {
 		return ""

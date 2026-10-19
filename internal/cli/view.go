@@ -83,8 +83,8 @@ func (m *chatModel) footer() string {
 	return styleFooter(m.statusWord(), m.modelName, m.root, m.tokenLabel(), m.width)
 }
 
-// tokenLabel is the session token pair on the status line.
-// It stays empty until a provider sends usage.
+// tokenLabel is the session pair on the status line.
+// Empty means the provider has sent no usage. A zero would invent a count.
 func (m *chatModel) tokenLabel() string {
 	if !m.usageSet {
 		return ""

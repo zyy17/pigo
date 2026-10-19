@@ -38,7 +38,6 @@ type Agent struct {
 	cancel context.CancelFunc
 }
 
-// usageTotals is in-memory only. Reset drops it with the transcript.
 type usageTotals struct {
 	last   ai.Usage
 	sum    ai.Usage
@@ -86,7 +85,7 @@ func (a *Agent) Messages() []ai.Message {
 }
 
 // Reset drops the transcript and the token totals.
-// The prompt, model, and tools stay.
+// Totals exist only in this process, so they go away with the messages.
 func (a *Agent) Reset() {
 	a.state.Messages = nil
 	a.usage = usageTotals{}
@@ -102,8 +101,8 @@ func (a *Agent) Usage() Usage {
 	}
 }
 
-// noteCallUsage records one model call.
-// A nil call means the provider omitted usage. Earlier calls stay in the sum.
+// noteCallUsage adds one reported call into the session sum.
+// A nil call is an omitted object, not a zero, so the sum stays unchanged.
 func (a *Agent) noteCallUsage(call *ai.Usage) (last, session *ai.Usage) {
 	if call == nil {
 		a.usage.last = ai.Usage{}
