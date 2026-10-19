@@ -1,10 +1,9 @@
 // Transcript scrolling.
 //
-// follow pins the view to the latest line. top is the first visible line
-// while the user is reading older history. Paging up clears follow; landing
-// on the tail sets it again, so the next output sticks to the bottom.
-// The offset is a wrapped line, not a source message, so a resize can
-// drift it. The next paint rewraps from the source text.
+// scroll is the first visible line, or followTail while the view sticks
+// to the latest line. Paging up sets a line; landing on the tail follows
+// again, so the next output sticks to the bottom. The offset is a wrapped
+// line, not a source message, so a resize can drift it.
 package cli
 
 import (
@@ -16,6 +15,8 @@ import (
 const (
 	pageOverlap = 1
 	wheelRows   = 1
+	// followTail sticks the transcript to its latest line.
+	followTail = -1
 )
 
 func (m chatModel) onWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
@@ -57,17 +58,11 @@ func (m chatModel) transcriptWindow(room int) []string {
 }
 
 func (m chatModel) viewTop(n, room int) int {
-	maxStart := n - room
-	if maxStart < 0 {
-		maxStart = 0
-	}
-	if m.follow || m.top >= maxStart {
+	maxStart := max(n-room, 0)
+	if m.scroll < 0 {
 		return maxStart
 	}
-	if m.top < 0 {
-		return 0
-	}
-	return m.top
+	return min(m.scroll, maxStart)
 }
 
 // scrollRows moves the transcript. Negative rows go toward older lines.
@@ -79,31 +74,19 @@ func (m chatModel) scrollRows(rows int) chatModel {
 	room := m.transcriptRows()
 	maxStart := n - room
 	if maxStart < 1 {
-		m.follow = true
-		m.top = 0
+		m.scroll = followTail
 		return m
 	}
 	start := maxStart
-	if !m.follow {
-		start = m.top
-		if start < 0 {
-			start = 0
-		}
-		if start > maxStart {
-			start = maxStart
-		}
+	if m.scroll >= 0 {
+		start = min(max(m.scroll, 0), maxStart)
 	}
 	next := start + rows
-	if next < 0 {
-		next = 0
-	}
 	if next >= maxStart {
-		m.follow = true
-		m.top = 0
+		m.scroll = followTail
 		return m
 	}
-	m.follow = false
-	m.top = next
+	m.scroll = max(next, 0)
 	return m
 }
 
@@ -117,13 +100,13 @@ func (m chatModel) pageRows() int {
 }
 
 func (m chatModel) canReturn() bool {
-	if m.follow || !m.ready {
+	if m.scroll < 0 || !m.ready {
 		return false
 	}
 	n := len(m.historyLines())
 	room := m.transcriptRows()
 	maxStart := n - room
-	return maxStart > 0 && m.top < maxStart
+	return maxStart > 0 && m.scroll < maxStart
 }
 
 func (m chatModel) transcript() string {

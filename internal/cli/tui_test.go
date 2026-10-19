@@ -432,7 +432,7 @@ func TestTranscriptScroll(t *testing.T) {
 	if moved := start - m.viewTop(n, room); moved != room-1 {
 		t.Fatalf("page up moved %d lines, want %d", moved, room-1)
 	}
-	if m.follow {
+	if m.scroll < 0 {
 		t.Fatal("page up stayed pinned to the tail")
 	}
 	up := ansi.Strip(m.View().Content)
@@ -449,23 +449,22 @@ func TestTranscriptScroll(t *testing.T) {
 
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
-	if !m.follow || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
+	if m.scroll >= 0 || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("esc did not return to the tail")
 	}
 
 	next, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 	m = next.(chatModel)
-	if m.follow || strings.Contains(ansi.Strip(m.View().Content), "row-79") {
+	if m.scroll < 0 || strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("wheel up did not scroll one row")
 	}
 	next, _ = m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
 	m = next.(chatModel)
-	if !m.follow || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
+	if m.scroll >= 0 || !strings.Contains(ansi.Strip(m.View().Content), "row-79") {
 		t.Fatal("wheel down did not resume following")
 	}
 
-	m.follow = false
-	m.top = 0
+	m.scroll = 0
 	held := ansi.Strip(m.View().Content)
 	m.addBlock(kindInfo, "NEW-TAIL-LINE")
 	if strings.Contains(ansi.Strip(m.View().Content), "NEW-TAIL-LINE") {
@@ -474,30 +473,28 @@ func TestTranscriptScroll(t *testing.T) {
 	if !strings.Contains(held, "row-00") && !strings.Contains(ansi.Strip(m.View().Content), "row-0") {
 		t.Fatal("reading position moved")
 	}
-	m.follow = true
+	m.scroll = followTail
 	if !strings.Contains(ansi.Strip(m.View().Content), "NEW-TAIL-LINE") {
 		t.Fatal("following frame missed new output")
 	}
 
-	m.follow = false
-	m.top = 0
+	m.scroll = 0
 	m.busy = true
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if next.(chatModel).follow {
+	if next.(chatModel).scroll < 0 {
 		t.Fatal("esc while busy jumped to the tail")
 	}
 
 	m = newChat(nil)
 	m.resize(80, 24)
 	m.addBlock(kindAssistant, text.String())
-	m.follow = false
-	m.top = 0
+	m.scroll = 0
 	reply := make(chan bool, 1)
 	m.ask = &confirmReq{command: "sudo true", reason: "sudo", reply: reply}
 	m.busy = true
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
 	m = next.(chatModel)
-	if m.follow || m.ask != nil {
+	if m.scroll < 0 || m.ask != nil {
 		t.Fatal("esc during confirm jumped or left the prompt open")
 	}
 	if <-reply {
