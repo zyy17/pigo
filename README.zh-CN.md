@@ -66,7 +66,7 @@ sequenceDiagram
 4. 如果助手请求了工具，就逐个执行。每次调用都配一条工具结果，失败和取消也一样。
 5. 回到第 2 步，直到助手停止、运行被取消，或达到轮数上限。
 
-系统提示沿用 Pi coding-agent 的分节：简短开场、工具列表、规则、技能列表、工作目录。它在构造请求时附上，不写入保存的会话记录。`Reset` 清空会话记录，提示、模型和工具保留。
+系统提示沿用 Pi coding-agent 的分节：简短开场、工具列表、规则、技能列表、工作目录。它在构造请求时附上，不写入保存的会话记录。`Reset` 清空当前会话记录，提示、模型和工具保留。对话也会追加到会话文件里，见下面的用法。
 
 ### 工作区
 
@@ -113,7 +113,7 @@ make build
 
 - Enter 发送。Esc 或 Ctrl-C 取消这一轮。这一轮进行中输入条仍可编辑，Enter 会排成一条后续消息（Esc 打断）。
 - 拒绝表上的 shell 命令会先询问。Enter 或 `y` 允许，Esc 或 `n` 拒绝。`-p` 和逐行会话不询问，直接拒绝。`--yolo`、`yolo: true` 或 `PIGO_YOLO=1` 跳过检查。
-- `/skill:name` 装入技能，`/reset` 清空会话，`/exit` 退出。
+- `/skill:name` 装入技能，`/reset` 清空当前会话记录并开始一个新的会话文件，`/exit` 退出。
 - 退出会离开备用屏幕。管道走逐行会话，不改屏幕。
 
 做完一个任务后退出：
@@ -122,6 +122,17 @@ make build
 ./pigo -p "Create hello.txt that says hi, then read it back"
 ./pigo -w ~/src/app -p "Summarize the Go files in this directory"
 ```
+
+恢复这个工作区最新的会话，或指定一个：
+
+```bash
+./pigo -c
+./pigo -c -p "What did we change?"
+./pigo --session 550e8400
+./pigo --no-session -p "Answer without saving this"
+```
+
+会话是 `~/.pigo/sessions/` 下的 JSONL 文件，每个工作区一个目录。路径编码和 Pi 相同；目录是 pigo 自己的，所以两个工具不会打开对方的文件。文件如何写入和读取见 [docs/design.zh-CN.md](docs/design.zh-CN.md#会话文件)。`/reset` 清掉模型下一次会看到的内容。原来的文件还在，下一条提示才新建文件。reset 之后如果没有新的提示，`--continue` 仍会打开原来的文件。
 
 从源码运行：
 
@@ -157,10 +168,11 @@ go test -tags e2e -count=1 -timeout 15m ./e2e/live/
 | `OPENAI_BASE_URL` | 该提供者的 API 根，通常以 `/v1` 结尾 | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | 该接口接受的模型名 | `gpt-5.6-luna` |
 | `PIGO_YOLO` | 设为 `1` 或 `true` 时，危险 shell 命令不再询问 | 关闭 |
+| `PIGO_SESSION_DIR` | 会话文件所在目录 | `~/.pigo/sessions` |
 
-`--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）和 `--yolo` 覆盖环境变量。API 密钥不做成命令行参数，避免进 shell 历史。
+`--print`（`-p`）、`--base-url`、`--model`、`--workspace`（`-w`）、`--yolo`、`--continue`（`-c`）、`--session`、`--no-session` 和 `--session-dir` 覆盖环境变量。`-c`、`--session` 和 `--no-session` 不能一起用。API 密钥不做成命令行参数，避免进 shell 历史。
 
-配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`、`yolo`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。没有传 `--yolo` 时，不会把文件里的 `yolo: true` 改回关闭。
+配置是一组扁平字段：`provider`、`api_key`、`base_url`、`model`、`workspace`、`yolo`、`session_dir`。后出现的来源胜出：内置默认值，然后是 `~/.pigo/config.yaml`，然后是 `./pigo.yaml`，然后是当前目录的 `.env`，然后是环境变量，最后是命令行参数。没有传 `--yolo` 时，不会把文件里的 `yolo: true` 改回关闭。`session_dir` 可以不写；空着就用 `~/.pigo/sessions`。
 
 ```yaml
 provider: openai
@@ -179,8 +191,8 @@ Created hello.txt.
 120 in · 40 out
 ```
 
-每次请求都会带上 `stream_options.include_usage`。报告了用量的调用累加成会话合计。聊天状态栏把这个合计显示成 `1.2K in · 340 out`；提供方没有给用量时留空。`-p` 只在某次调用带了用量时打一行，例如 `120 in · 40 out`。用量不保存，pigo 也不计价。
+每次请求都会带上 `stream_options.include_usage`。报告了用量的调用累加成会话合计。聊天状态栏把这个合计显示成 `1.2K in · 340 out`；提供方没有给用量时留空。`-p` 只在某次调用带了用量时打一行，例如 `120 in · 40 out`。会话记录会保存。用量不保存，恢复后合计从头算。pigo 也不计价。
 
 ## 不做的事
 
-完整的 Pi TUI、各家模型的原生 API、技能市场、忽略文件过滤、磁盘上的会话文件、子代理，以及遥测。轮数上限是 25 次模型调用。
+完整的 Pi TUI、各家模型的原生 API、技能市场、忽略文件过滤、会话分支、会话选择器、压缩、子代理，以及遥测。轮数上限是 25 次模型调用。

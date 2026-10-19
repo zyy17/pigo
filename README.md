@@ -66,7 +66,7 @@ sequenceDiagram
 4. When the assistant requested tool calls, run them one at a time. Each call is paired with a tool-result message, including failures and cancellation.
 5. Go back to step 2 until the assistant stops, the run is canceled, or the turn limit is hit.
 
-The system prompt follows Pi's coding-agent sections: a short preamble, the tool list, the rules, the skill list, and the working directory. It is added when a request is built and is kept out of the stored transcript. `Reset` clears the transcript and leaves the prompt, model, and tools in place.
+The system prompt follows Pi's coding-agent sections: a short preamble, the tool list, the rules, the skill list, and the working directory. It is added when a request is built and is kept out of the stored transcript. `Reset` clears the live transcript and leaves the prompt, model, and tools in place. The conversation is also appended to a session file, described below.
 
 ### Workspace
 
@@ -113,7 +113,7 @@ A terminal opens the chat on the alternate screen. The keys are in [docs/tui.md]
 
 - Enter sends. Esc or Ctrl-C cancels the turn. While a turn runs the composer stays editable, and Enter queues one follow-up message (Esc interrupts).
 - A denylisted shell command asks before it runs. Enter or `y` allows it, Esc or `n` denies it. `-p` and the line session deny it instead of asking. `--yolo`, `yolo: true`, or `PIGO_YOLO=1` skips the check.
-- `/skill:name` loads a skill, `/reset` clears the transcript, and `/exit` quits.
+- `/skill:name` loads a skill, `/reset` clears the live transcript and starts a new session file, and `/exit` quits.
 - Quitting leaves the alternate screen. A pipe uses the line session and does not change the screen.
 
 One task, then exit:
@@ -122,6 +122,17 @@ One task, then exit:
 ./pigo -p "Create hello.txt that says hi, then read it back"
 ./pigo -w ~/src/app -p "Summarize the Go files in this directory"
 ```
+
+Resume the newest session for this workspace, or a specific one:
+
+```bash
+./pigo -c
+./pigo -c -p "What did we change?"
+./pigo --session 550e8400
+./pigo --no-session -p "Answer without saving this"
+```
+
+Sessions are JSONL files under `~/.pigo/sessions/`, one directory per workspace. The path encoding matches Pi; the directory is pigo's, so the two tools do not open each other's files. How a file is written and loaded is in [docs/design.md](docs/design.md#sessions). `/reset` clears what the model will see next. The previous file stays, and the next prompt creates a new one. `--continue` after a reset with no new prompt still opens the previous file.
 
 From source:
 
@@ -157,10 +168,11 @@ The live tests skip when `OPENAI_API_KEY` or `OPENAI_BASE_URL` is unset. They ch
 | `OPENAI_BASE_URL` | API root for that provider, usually ending in `/v1` | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | Model name that endpoint accepts | `gpt-5.6-luna` |
 | `PIGO_YOLO` | `1` or `true` runs dangerous shell commands without asking | off |
+| `PIGO_SESSION_DIR` | Directory for session files | `~/.pigo/sessions` |
 
-Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), and `--yolo` override the environment. The API key stays out of the flags so it does not land in shell history.
+Flags `--print` (`-p`), `--base-url`, `--model`, `--workspace` (`-w`), `--yolo`, `--continue` (`-c`), `--session`, `--no-session`, and `--session-dir` override the environment. `-c`, `--session`, and `--no-session` cannot be combined. The API key stays out of the flags so it does not land in shell history.
 
-Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspace`, and `yolo`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags. An absent `--yolo` does not turn a file's `yolo: true` back off.
+Settings are one flat set: `provider`, `api_key`, `base_url`, `model`, `workspace`, `yolo`, and `session_dir`. A later source wins: built-in defaults, then `~/.pigo/config.yaml`, then `./pigo.yaml`, then `.env` in the current directory, then the environment, then flags. An absent `--yolo` does not turn a file's `yolo: true` back off. `session_dir` is optional; an empty value uses `~/.pigo/sessions`.
 
 ```yaml
 provider: openai
@@ -179,8 +191,8 @@ Created hello.txt.
 120 in · 40 out
 ```
 
-Each request sets `stream_options.include_usage`. Calls that report usage add up to a session total. The chat status line shows that total as `1.2K in · 340 out` and stays blank when the provider sends none. `-p` prints one line, such as `120 in · 40 out`, only for a call that reported usage. Counts are not saved, and pigo does not price them.
+Each request sets `stream_options.include_usage`. Calls that report usage add up to a session total. The chat status line shows that total as `1.2K in · 340 out` and stays blank when the provider sends none. `-p` prints one line, such as `120 in · 40 out`, only for a call that reported usage. The transcript is saved. The counts are not, and a resumed session starts them over. pigo does not price them.
 
 ## Out of scope
 
-A full Pi TUI, native APIs for every model vendor, a skills marketplace, ignore-file filtering, session files on disk, sub-agents, and telemetry. The turn limit is 25 model calls.
+A full Pi TUI, native APIs for every model vendor, a skills marketplace, ignore-file filtering, session branching, the session picker, compaction, sub-agents, and telemetry. The turn limit is 25 model calls.
