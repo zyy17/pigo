@@ -21,9 +21,11 @@ type commandArgs struct {
 	Command string `json:"command"`
 }
 
+const runCommandTool = "run_command"
+
 func commandTool(ws *Workspace) agent.Tool {
 	return agent.Tool{
-		Name:  "run_command",
+		Name:  runCommandTool,
 		Label: "run_command",
 		Description: "Execute a bash command in the current working directory. " +
 			"Returns stdout and stderr. Output is truncated. The timeout is 30 seconds.",
