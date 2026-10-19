@@ -11,14 +11,21 @@ pigo 是一个小型 Go 编码代理。它和一个兼容 OpenAI 的模型对话
 ```mermaid
 flowchart TD
     cli["CLI<br/>会话"]
+    config["internal/config"]
     coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
     http["OpenAI<br/>HTTP"]
+    cli --> config
     cli --> coding
+    cli --> skills
+    cli --> agent
+    cli --> ai
+    config --> skills
     coding --> skills
     coding --> agent
+    coding --> ai
     agent --> ai
     ai --> http
 ```
@@ -32,7 +39,7 @@ flowchart TD
 
 `internal/ai` 描述工具并接收模型输出。`internal/agent` 执行工具，把结果写回会话记录。`internal/coding` 提供文件和 shell 工具、发现技能，并把写入限制在一个目录里。更完整的讲解在 [docs/design.zh-CN.md](docs/design.zh-CN.md)。
 
-一条会话记录是用户消息、助手消息，或工具结果。助手的文本和工具调用直接放在助手消息上。HTTP 客户端把工具结果转成 OpenAI 的 `role: "tool"`。只有这一处出现线路格式。
+一条会话记录是用户消息、助手消息，或工具结果。助手的文本和工具调用直接放在助手消息上。`wire.go` 写出 chat-completions 的 JSON 形状，`encodeRequest` 用 `json.Marshal` 把工具结果转成 OpenAI 的 `role: "tool"`。只有这一处出现线路格式。
 
 ### 一轮
 

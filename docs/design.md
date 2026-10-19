@@ -9,14 +9,21 @@ pigo is a small Go program for reading [Pi](https://github.com/earendil-works/pi
 ```mermaid
 flowchart TD
     cli["internal/cli<br/>terminal session"]
+    config["internal/config"]
     coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
     http["OpenAI<br/>HTTP"]
+    cli --> config
     cli --> coding
+    cli --> skills
+    cli --> agent
+    cli --> ai
+    config --> skills
     coding --> skills
     coding --> agent
+    coding --> ai
     agent --> ai
     ai --> http
 ```
@@ -27,7 +34,7 @@ flowchart TD
 | `internal/agent` | Transcript, the ask/act loop, calling `Tool.Execute` | HTTP, workspaces, skills |
 | `internal/coding` | Workspace, file and shell tools, the system prompt | How SSE is parsed |
 | `internal/skills` | Where `SKILL.md` lives, the short prompt list | The loop and HTTP |
-| `internal/config` | Flags, environment, `.env`, YAML config files | The loop, HTTP, and the screen |
+| `internal/config` | Flags, environment, `.env`, YAML. Quotes via `skills.Unquote` | The loop, HTTP, and the screen |
 | `internal/cli` | Cobra, Bubble Tea, `/skill:name`, calling `config.Load` | Path checks and the wire format |
 
 A skill never becomes a new agent type. The coding session discovers skills and either mentions them in the system prompt or, for `/skill:name`, pastes the file into an ordinary user message. `Agent.Prompt` still only sees messages and tools.
@@ -36,7 +43,7 @@ A skill never becomes a new agent type. The coding session discovers skills and 
 
 The transcript is the memory of the loop. A message has a role, text, and for the assistant a list of tool calls. A tool result is its own role, `toolResult`, and carries the tool-call ID it answers.
 
-OpenAI chat completions use a different shape: tool calls are nested under `function`, and a tool result is `role: "tool"`. `encodeRequest` in `internal/ai` is the only place that translation happens. The rest of the program keeps the flatter transcript.
+OpenAI chat completions use a different shape: tool calls are nested under `function`, and a tool result is `role: "tool"`. `wire.go` names one Go type per JSON object. `encodeRequest` and `decodeChunk` are the only translation, and they use `json.Marshal` and `json.Unmarshal`. The rest of the program keeps the flatter transcript. Agent events use `EventType`.
 
 The system prompt is attached when a request is built. It is not stored in the transcript, so `Reset` can drop messages and leave the prompt, model, and tools in place.
 
@@ -113,7 +120,7 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips the check.
+Enter or `y` runs the command. Esc or `n` denies it. The tool result is `blocked:` plus the reason, and the turn goes on. Ctrl-C still aborts the turn. One-shot mode (`-p`) and the line REPL have no prompt, so they deny. Both cancel that turn on Ctrl+C instead of leaving the signal to kill the process. `--yolo`, `yolo: true` in a config file, or `PIGO_YOLO=1` skips the check. The chat screen and the line REPL share one command table: `/exit`, `exit`, `quit`, `/quit`, and `/reset`.
 
 This is a pattern denylist. It is easy to bypass with a script, encoding, an alias, or a wrapper such as `env rm`. It guards against a model slip, not an adversary. Real isolation needs a sandbox: a container, macOS seatbelt, or Linux landlock.
 
@@ -123,7 +130,7 @@ This is a pattern denylist. It is easy to bypass with a script, encoding, an ali
 
 ## Configuration
 
-`internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it.
+`internal/config` is the only package that reads process settings. koanf merges one flat struct. Nothing under `internal/agent`, `internal/ai`, or `internal/coding` imports it. It calls `skills.Unquote`, so `.env` and skill frontmatter drop quotes the same way. `.env` fills empty process variables for the shell tool and does not replace a variable that is already set. The process environment is read before that fill, which is why a process value still beats `.env`.
 
 Precedence, from lowest to highest: defaults, `~/.pigo/config.yaml`, `./pigo.yaml`, `.env`, the environment (`PIGO_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PIGO_YOLO`), then flags. Blank values are skipped. The built-in model is `gpt-5.6-luna`. The CLI is Cobra: `pigo` opens the chat, `-p` / `--print` runs one prompt, and `--yolo` skips the dangerous-command check.
 

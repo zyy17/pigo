@@ -9,14 +9,21 @@ pigo 是一个用来阅读 [Pi](https://github.com/earendil-works/pi) 核心想�
 ```mermaid
 flowchart TD
     cli["internal/cli<br/>终端会话"]
+    config["internal/config"]
     coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
     http["OpenAI<br/>HTTP"]
+    cli --> config
     cli --> coding
+    cli --> skills
+    cli --> agent
+    cli --> ai
+    config --> skills
     coding --> skills
     coding --> agent
+    coding --> ai
     agent --> ai
     ai --> http
 ```
@@ -27,7 +34,7 @@ flowchart TD
 | `internal/agent` | 会话记录、询问再行动的循环、调用 `Tool.Execute` | HTTP、工作区、技能 |
 | `internal/coding` | 工作区、文件和 shell 工具、系统提示 | SSE 如何解析 |
 | `internal/skills` | `SKILL.md` 在哪里、提示词里的简短列表 | 循环和 HTTP |
-| `internal/config` | 命令行参数、环境变量、`.env`、YAML 配置文件 | 循环、HTTP 和画面 |
+| `internal/config` | 命令行参数、环境变量、`.env`、YAML。引号用 `skills.Unquote` | 循环、HTTP 和画面 |
 | `internal/cli` | Cobra、Bubble Tea、`/skill:name`、调用 `config.Load` | 路径检查和线路格式 |
 
 技能不会变成一种新的代理。编码会话发现技能后，要么把它们写进系统提示，要么在 `/skill:name` 时把文件贴进一条普通用户消息。`Agent.Prompt` 看到的仍然只是消息和工具。
@@ -36,7 +43,7 @@ flowchart TD
 
 会话记录是循环的记忆。一条消息有角色和文本；助手消息还可以带一组工具调用。工具结果是单独的角色 `toolResult`，并带上它回答的那次调用的 ID。
 
-OpenAI chat completions 的形状不同：工具调用嵌在 `function` 里，工具结果的角色是 `tool`。`internal/ai` 的 `encodeRequest` 是唯一做这个转换的地方。程序其余部分保持更平坦的会话记录。
+OpenAI chat completions 的形状不同：工具调用嵌在 `function` 里，工具结果的角色是 `tool`。`wire.go` 为每一层 JSON 对象起一个具名类型。只有 `encodeRequest` 和 `decodeChunk` 做转换，用的是 `json.Marshal` 和 `json.Unmarshal`。程序其余部分保持更平坦的会话记录。代理事件的类型字段是 `EventType`。
 
 系统提示在构造请求时附上。它不写入会话记录，所以 `Reset` 可以丢掉消息，同时留下提示、模型和工具。
 
@@ -113,7 +120,7 @@ recursive delete of / or home
 enter allow · esc deny
 ```
 
-Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过检查。
+Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原因，这一轮继续。Ctrl-C 仍然中止这一轮。单次模式（`-p`）和行会话没有提示，所以直接拒绝。这两种模式在 Ctrl+C 时取消这一轮，而不是让信号直接杀掉进程。`--yolo`、配置文件里的 `yolo: true`，或 `PIGO_YOLO=1`，会跳过检查。聊天画面和行会话共用一张命令表：`/exit`、`exit`、`quit`、`/quit` 和 `/reset`。
 
 这是一张模式拒绝表。脚本、编码、别名，或 `env rm` 这样的包装，都很容易绕过。它防的是模型失手，不是对手。真正的隔离需要沙箱：容器、macOS seatbelt，或 Linux landlock。
 
@@ -123,7 +130,7 @@ Enter 或 `y` 执行。Esc 或 `n` 拒绝。工具结果是 `blocked:` 加上原
 
 ## 配置
 
-只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。
+只有 `internal/config` 读取进程设置。koanf 把它们合并成一个扁平结构。`internal/agent`、`internal/ai`、`internal/coding` 都不引用它。它调用 `skills.Unquote`，所以 `.env` 和技能前言去掉引号的方式相同。`.env` 只填补进程里还没有的变量，给 shell 工具用，不会覆盖已经设置的变量。进程环境在这次填补之前就读好了，所以进程里的值仍然胜过 `.env`。
 
 从低到高的优先级：默认值、`~/.pigo/config.yaml`、`./pigo.yaml`、`.env`、环境变量（`PIGO_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`、`PIGO_YOLO`），然后是命令行参数。空值会被跳过。内置模型是 `gpt-5.6-luna`。命令行用 Cobra：`pigo` 打开聊天，`-p` / `--print` 只跑一条提示，`--yolo` 跳过危险命令检查。
 

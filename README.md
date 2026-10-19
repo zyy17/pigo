@@ -11,14 +11,21 @@ pigo is a small Go coding agent. It chats with an OpenAI-compatible model, runs 
 ```mermaid
 flowchart TD
     cli["CLI session"]
+    config["internal/config"]
     coding["internal/coding<br/>pi-coding-agent"]
     skills["internal/skills"]
     agent["internal/agent<br/>pi-agent-core"]
     ai["internal/ai<br/>pi-ai"]
     http["OpenAI<br/>HTTP"]
+    cli --> config
     cli --> coding
+    cli --> skills
+    cli --> agent
+    cli --> ai
+    config --> skills
     coding --> skills
     coding --> agent
+    coding --> ai
     agent --> ai
     ai --> http
 ```
@@ -32,7 +39,7 @@ flowchart TD
 
 `internal/ai` describes tools and streams model output. `internal/agent` runs tools and writes results back into the transcript. `internal/coding` supplies the file and shell tools, discovers skills, and keeps writes inside one directory. The longer walkthrough is in [docs/design.md](docs/design.md).
 
-A transcript message is a user message, an assistant message, or a tool result. Assistant text and tool calls sit directly on the assistant message. The HTTP client turns tool results into OpenAI `role: "tool"` messages. That conversion is the only place the wire format appears.
+A transcript message is a user message, an assistant message, or a tool result. Assistant text and tool calls sit directly on the assistant message. `wire.go` names the chat-completions JSON, and `encodeRequest` turns tool results into OpenAI `role: "tool"` messages with `json.Marshal`. That conversion is the only place the wire format appears.
 
 ### A turn
 

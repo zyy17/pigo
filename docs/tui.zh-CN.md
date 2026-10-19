@@ -25,7 +25,7 @@ flowchart TD
 | 模型和一轮任务 | `tui.go` | `chatModel`、`runTUI`、`apply`、`submit` |
 | 按键 | `keys.go` | `onKey`、`onComposer`、`continuedLine` |
 | 画面 | `view.go` | `View`、`layout`、`chromeAbove`、`footer` |
-| 对话区滚动 | `scroll.go` | `scrollRows`、`transcriptWindow`、`follow` |
+| 对话区滚动 | `scroll.go` | `scrollRows`、`transcriptWindow`、`scroll` |
 | 输入条 | `input.go` | `composer`、`inputBlock` |
 | 硬件光标 | `cursor.go` | `placeCursor` |
 | 宽度和折行 | `wrap.go` | `wrapText`、`wrapRunes` |
@@ -56,13 +56,13 @@ flowchart TB
 
 ## 一轮任务
 
-Enter 把输入条写入对话区，清空输入，并调用 `Session.Prompt`。事件从通道回来，变成 `streamMsg`。文本增量积在 `live` 里，画成助手气泡。工具开始是一行 `• Ran`，结果是一小段暗色预览。`AgentEnd` 清掉 `busy`，并记下状态。
+Enter 把输入条写入对话区，清空输入，并调用 `Session.Prompt`。`runTUI` 订阅会话，用 `program.Send` 把每条事件送成 `streamMsg`。模型上没有事件通道。文本增量积在 `live` 里，画成助手气泡。工具开始是一行 `• Ran`，结果是一小段暗色预览。`AgentEnd` 清掉 `busy`，并记下状态。`scroll` 是可见对话的第一行。负数表示跟着末尾，所以上翻之前新输出贴在底部。
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
     Idle --> Running: 发送
-    Running --> Confirm: 拒绝
+    Running --> Confirm: 命中黑名单
     Confirm --> Running: 允许
     Confirm --> Running: 拒绝
     Running --> Idle: 结束
@@ -88,7 +88,8 @@ stateDiagram-v2
 | Ctrl-C | 运行中 | 打断；若正在确认，先拒绝 |
 | Ctrl-C | 空闲 | 退出 |
 | Ctrl-D | 空闲且输入条为空 | 退出 |
-| Ctrl-U、Ctrl-W | 空闲 | 清空这一行，或删掉一个词 |
+| Ctrl-U | 空闲 | 清空整个输入条 |
+| Ctrl-W | 空闲 | 删掉插入点前的一个词 |
 | 方向键、Home、End | 空闲 | 移动插入点；Up 和 Down 移动菜单 |
 
 Bubble Tea 向终端请求按键消歧义，退出时关掉。能回答的终端把 Shift+Enter 当成单独的键。其余终端仍然可以用 Ctrl+J、Alt+Enter 和行末反斜杠。
