@@ -6,8 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Both platforms. macOS catches platform-specific failures, such as
+  # t.TempDir() returning a /var path that resolves to /private/var.
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
