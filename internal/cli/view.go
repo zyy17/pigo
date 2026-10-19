@@ -109,9 +109,6 @@ func (m *chatModel) statusWord() string {
 	if m.busy {
 		return "working"
 	}
-	if m.status == "" {
-		return "ready"
-	}
 	return m.status
 }
 

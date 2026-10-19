@@ -16,6 +16,7 @@ import (
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/coding"
 	"github.com/zyy17/pigo/internal/config"
+	"github.com/zyy17/pigo/internal/linebuf"
 )
 
 const version = "0.1.0"
@@ -150,14 +151,13 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 		return err
 	}
 	app := &app{session: session, in: in, out: out}
-	if cfg.Prompt != "" {
-		session.Subscribe(func(ev agent.Event) { render(out, ev) })
-		return app.runLine(cfg.Prompt)
-	}
-	if interactiveTerminal(in, out) {
+	if cfg.Prompt == "" && interactiveTerminal(in, out) {
 		return runTUI(session)
 	}
 	session.Subscribe(func(ev agent.Event) { render(out, ev) })
+	if cfg.Prompt != "" {
+		return app.runLine(cfg.Prompt)
+	}
 	return app.repl()
 }
 
@@ -181,7 +181,7 @@ func (a *app) repl() error {
 	fmt.Fprintln(a.out, "Enter a task. "+hintText())
 	sc := bufio.NewScanner(a.in)
 	// The default token limit is 64KiB, which rejects a long pasted task.
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
 	for {
 		fmt.Fprint(a.out, "you> ")
 		if !sc.Scan() {
