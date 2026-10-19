@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/zyy17/pigo/internal/agent"
 	"github.com/zyy17/pigo/internal/ai"
@@ -262,6 +263,71 @@ func TestAbortPairsRemainingCalls(t *testing.T) {
 	}
 	if results != 2 {
 		t.Fatalf("paired results: %d", results)
+	}
+}
+
+func TestAbortStopsPromptChainedFromAgentEnd(t *testing.T) {
+	var calls int
+	var mu sync.Mutex
+	stream := func(ctx context.Context, _ ai.Request) (<-chan ai.Event, error) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		ch := make(chan ai.Event, 1)
+		if n == 1 {
+			msg := ai.Assistant("done", ai.StopStop)
+			ch <- ai.Event{Type: ai.EventDone, Message: msg}
+			close(ch)
+			return ch, nil
+		}
+		go func() {
+			defer close(ch)
+			<-ctx.Done()
+			ch <- ai.Event{Type: ai.EventError, Err: ctx.Err()}
+		}()
+		return ch, nil
+	}
+	ag, err := agent.New(agent.Config{Model: "fake", Stream: stream})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ready := make(chan struct{})
+	secondErr := make(chan error, 1)
+	var starts int
+	ag.Subscribe(func(ev agent.Event) {
+		if ev.Type == agent.AgentStart {
+			starts++
+			if starts == 2 {
+				close(ready)
+			}
+			return
+		}
+		if ev.Type != agent.AgentEnd || starts != 1 {
+			return
+		}
+		go func() {
+			secondErr <- ag.Prompt(context.Background(), "queued")
+		}()
+		select {
+		case <-ready:
+		case <-time.After(2 * time.Second):
+			t.Fatal("chained prompt did not start")
+		}
+	})
+
+	if err := ag.Prompt(context.Background(), "first"); err != nil {
+		t.Fatal(err)
+	}
+	ag.Abort()
+	select {
+	case err := <-secondErr:
+		if !errors.Is(err, agent.ErrInterrupted) {
+			t.Fatalf("chained prompt: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("abort did not stop the chained prompt")
 	}
 }
 

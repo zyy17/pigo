@@ -23,8 +23,6 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	a.setCancel(cancel)
-	defer a.clearCancel()
-	defer cancel()
 
 	a.emit(Event{Type: AgentStart})
 	user := ai.User(text)
@@ -33,6 +31,10 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 	a.emit(Event{Type: MessageEnd, Message: user})
 
 	err := a.run(ctx)
+	// Clear before AgentEnd. A listener may start the next Prompt from
+	// that event, and a deferred clear would drop its cancel func.
+	a.clearCancel()
+	cancel()
 	if errors.Is(err, context.Canceled) {
 		err = ErrInterrupted
 	}
