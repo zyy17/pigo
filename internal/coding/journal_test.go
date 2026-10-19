@@ -19,6 +19,8 @@ func TestJournalRoundTripAndResume(t *testing.T) {
 		ai.Assistant("wrote it", ai.StopStop),
 	}}
 	session := openPersisted(t, dir, sessions, "", script)
+	// This test records a real write. There is no confirm screen, so yolo skips the review.
+	session.yolo = true
 	if session.SessionFile() != "" {
 		t.Fatal("file existed before the first message")
 	}
