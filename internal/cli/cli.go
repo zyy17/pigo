@@ -33,8 +33,10 @@ Environment:
   OPENAI_API_KEY    API key for PIGO_PROVIDER=openai (required)
   OPENAI_BASE_URL   OpenAI-compatible API root (default https://api.openai.com/v1)
   OPENAI_MODEL      model name that endpoint accepts (default gpt-4o-mini)
+  PIGO_YOLO         set to 1 or true to skip the dangerous-command check
 
 Config files are optional: ~/.pigo/config.yaml, then ./pigo.yaml.
+A yolo: true key in those files skips the same check.
 Precedence is flags, then the environment, then .env, then those files, then defaults.
 `
 
@@ -69,6 +71,7 @@ func newCommand(in io.Reader, out io.Writer) *cobra.Command {
 	cmd.Flags().StringVarP(&flags.Workspace, "workspace", "w", "", "workspace directory (default: current directory)")
 	cmd.Flags().StringVar(&flags.Model, "model", "", "model name (default: OPENAI_MODEL or gpt-4o-mini)")
 	cmd.Flags().StringVar(&flags.BaseURL, "base-url", "", "API root (default: OPENAI_BASE_URL or https://api.openai.com/v1)")
+	cmd.Flags().BoolVar(&flags.Yolo, "yolo", false, "run dangerous shell commands without asking")
 	return cmd
 }
 
@@ -85,6 +88,7 @@ func start(flags config.Config, in io.Reader, out io.Writer) error {
 		BaseURL:   cfg.BaseURL,
 		Model:     cfg.Model,
 		Workspace: cfg.Workspace,
+		Yolo:      cfg.Yolo,
 	})
 	if err != nil {
 		return err

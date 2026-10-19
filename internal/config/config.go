@@ -23,6 +23,7 @@ type Config struct {
 	BaseURL   string `koanf:"base_url"`
 	Model     string `koanf:"model"`
 	Workspace string `koanf:"workspace"`
+	Yolo      bool   `koanf:"yolo"`
 	Prompt    string `koanf:"-"`
 }
 
@@ -118,7 +119,19 @@ func envMap() map[string]any {
 			out[name] = v
 		}
 	}
+	if yoloOn(os.Getenv("PIGO_YOLO")) {
+		out["yolo"] = true
+	}
 	return out
+}
+
+func yoloOn(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 func flagMap(flags Config) map[string]any {
@@ -133,6 +146,10 @@ func flagMap(flags Config) map[string]any {
 	put("base_url", flags.BaseURL)
 	put("model", flags.Model)
 	put("workspace", flags.Workspace)
+	// A false flag must not clear yolo: true from a file.
+	if flags.Yolo {
+		out["yolo"] = true
+	}
 	return out
 }
 
@@ -154,6 +171,9 @@ func loadDotEnv(k *koanf.Koanf, path string) error {
 		}
 		if name, ok := envNames[key]; ok {
 			overlay[name] = val
+		}
+		if key == "PIGO_YOLO" && yoloOn(val) {
+			overlay["yolo"] = true
 		}
 	}
 	return loadMap(k, overlay)
