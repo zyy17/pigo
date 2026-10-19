@@ -4,28 +4,27 @@ import (
 	"github.com/zyy17/pigo/internal/ai"
 )
 
-// Type is one lifecycle event. The names follow Pi's agent events.
-type Type string
+// EventType is one lifecycle event. The names follow Pi's agent events.
+type EventType string
 
 const (
-	AgentStart    Type = "agent_start"
-	AgentEnd      Type = "agent_end"
-	TurnStart     Type = "turn_start"
-	TurnEnd       Type = "turn_end"
-	MessageStart  Type = "message_start"
-	MessageUpdate Type = "message_update"
-	MessageEnd    Type = "message_end"
-	ToolStart     Type = "tool_execution_start"
-	ToolEnd       Type = "tool_execution_end"
+	AgentStart    EventType = "agent_start"
+	AgentEnd      EventType = "agent_end"
+	TurnStart     EventType = "turn_start"
+	TurnEnd       EventType = "turn_end"
+	MessageStart  EventType = "message_start"
+	MessageUpdate EventType = "message_update"
+	MessageEnd    EventType = "message_end"
+	ToolStart     EventType = "tool_execution_start"
+	ToolEnd       EventType = "tool_execution_end"
 )
 
 // Event reports loop progress to the UI.
 // Message is set for message events. Tool fields are set for tool events.
 type Event struct {
-	Type      Type
+	Type      EventType
 	Turn      int
 	Message   ai.Message
-	Messages  []ai.Message
 	TextDelta string
 	ToolID    string
 	ToolName  string
