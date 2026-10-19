@@ -11,7 +11,7 @@ import (
 )
 
 func TestCaretColumnForCJKAndWrap(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
@@ -152,7 +152,7 @@ func TestCursorTracksTheComposer(t *testing.T) {
 }
 
 func readyCursorChat() chatModel {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)

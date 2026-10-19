@@ -65,7 +65,7 @@ func TestConfirmKeys(t *testing.T) {
 }
 
 func readyChat() chatModel {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	return m
 }

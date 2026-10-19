@@ -15,7 +15,7 @@ import (
 )
 
 func TestNewlineBindings(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	m.comp.insert("hello")
 
@@ -59,7 +59,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 	session := blockingSession(t, started)
 	events := make(chan agent.Event, 64)
 	session.Subscribe(func(ev agent.Event) { events <- ev })
-	m := newChat(session, events)
+	m := newChat(session)
 	m.resize(80, 24)
 	m.comp.insert("hello there")
 
@@ -86,7 +86,7 @@ func TestEnterCommitsTheUserLine(t *testing.T) {
 
 	done := make(chan chatModel, 1)
 	go func() {
-		done <- runCmds(t, m, cmd)
+		done <- runCmds(t, m, cmd, events)
 	}()
 	select {
 	case <-started:

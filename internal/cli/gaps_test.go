@@ -7,7 +7,7 @@ import (
 )
 
 func TestComposerEdits(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	m.comp.set("ab cd")
 	steps := []struct {

@@ -9,7 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -33,7 +32,7 @@ func TestChatLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := newChat(session, nil)
+	m := newChat(session)
 	m.resize(80, 24)
 	got := m.View().Content
 	if h := lipgloss.Height(got); h > 24 {
@@ -93,7 +92,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 		t.Fatalf("long footer was not truncated: %s", long)
 	}
 
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.modelName = strings.Repeat("m", 40)
 	m.root = strings.Repeat("x", 80)
 	m.busy = true
@@ -108,7 +107,7 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 }
 
 func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	var text strings.Builder
 	for range 40 {
@@ -136,7 +135,7 @@ func TestLongTranscriptStaysInsideTheFrame(t *testing.T) {
 }
 
 func TestChatShowsToolsAndText(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	m.apply(agent.Event{Type: agent.ToolStart, ToolName: "write_file", Args: []byte(`{"path":"add.go"}`)})
 	m.apply(agent.Event{Type: agent.ToolEnd, ToolName: "write_file", Result: "wrote add.go (20 bytes)"})
@@ -164,7 +163,7 @@ func TestChatShowsToolsAndText(t *testing.T) {
 }
 
 func TestExitClearsTheLiveView(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	if m.View().Content == "" {
 		t.Fatal("expected a live view")
@@ -184,7 +183,7 @@ func TestExitClearsTheLiveView(t *testing.T) {
 }
 
 func TestCtrlDQuitsWhenIdle(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(40, 12)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	m = next.(chatModel)
@@ -198,7 +197,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 		t.Fatalf("quit command was %T", cmd())
 	}
 
-	m = newChat(nil, nil)
+	m = newChat(nil)
 	m.resize(40, 12)
 	m.comp.insert("keep")
 	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
@@ -207,7 +206,7 @@ func TestCtrlDQuitsWhenIdle(t *testing.T) {
 		t.Fatal("ctrl-d quit with text in the composer")
 	}
 
-	m = newChat(nil, nil)
+	m = newChat(nil)
 	m.resize(40, 12)
 	m.busy = true
 	next, cmd = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
@@ -229,7 +228,7 @@ func TestResetPrintsSeparator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := newChat(session, nil)
+	m := newChat(session)
 	m.resize(80, 24)
 	m.comp.insert("/reset")
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -272,11 +271,11 @@ func TestChatRunsAWrite(t *testing.T) {
 
 	events := make(chan agent.Event, 64)
 	session.Subscribe(func(ev agent.Event) { events <- ev })
-	m := newChat(session, events)
+	m := newChat(session)
 	m.resize(80, 24)
 	model, cmd := m.submit("write hello.txt")
 	m = model.(chatModel)
-	m = runCmds(t, m, cmd)
+	m = runCmds(t, m, cmd, events)
 
 	body, err := os.ReadFile(filepath.Join(dir, "hello.txt"))
 	if err != nil || string(body) != "hi\n" {
@@ -327,7 +326,7 @@ func TestWrapKeepsWordsAndCaret(t *testing.T) {
 }
 
 func TestCaretStaysInTheInput(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.modelName = "glm-5.3"
 	m.root = "/tmp/pigo-live"
 	m.resize(80, 24)
@@ -373,7 +372,7 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 		t.Fatalf("preview: %s", preview)
 	}
 
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(40, 24)
 	m.addBlock(kindAssistant, src)
 	wide := m.renderBlock(m.blocks[0])
@@ -397,7 +396,7 @@ func TestWrapCJKAndRewrapOnResize(t *testing.T) {
 }
 
 func TestTranscriptScroll(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	var text strings.Builder
 	for i := range 80 {
@@ -488,7 +487,7 @@ func TestTranscriptScroll(t *testing.T) {
 		t.Fatal("esc while busy jumped to the tail")
 	}
 
-	m = newChat(nil, nil)
+	m = newChat(nil)
 	m.resize(80, 24)
 	m.addBlock(kindAssistant, text.String())
 	m.follow = false
@@ -515,26 +514,35 @@ func assertWidth(t *testing.T, view string, width int) {
 	}
 }
 
-// runCmds performs the prompt command and the event listener the way the
-// Bubble Tea runtime would: both run together, then each event updates the model.
-func runCmds(t *testing.T, m chatModel, cmd tea.Cmd) chatModel {
+// runCmds runs the prompt command and applies session events the way
+// program.Send would deliver them to Update.
+func runCmds(t *testing.T, m chatModel, cmd tea.Cmd, events <-chan agent.Event) chatModel {
 	t.Helper()
-	pending := execCmds(t, cmd)
-	for len(pending) > 0 && m.busy {
-		msg := pending[0]
-		pending = pending[1:]
-		if _, ok := msg.(spinner.TickMsg); ok {
-			next, _ := m.Update(msg)
+	done := make(chan struct{})
+	go func() {
+		execCmds(t, cmd)
+		close(done)
+	}()
+	for {
+		select {
+		case ev := <-events:
+			next, _ := m.Update(streamMsg{event: ev})
 			m = next.(chatModel)
-			continue
-		}
-		next, follow := m.Update(msg)
-		m = next.(chatModel)
-		if m.busy {
-			pending = append(pending, execCmds(t, follow)...)
+			if !m.busy {
+				return m
+			}
+		case <-done:
+			for {
+				select {
+				case ev := <-events:
+					next, _ := m.Update(streamMsg{event: ev})
+					m = next.(chatModel)
+				default:
+					return m
+				}
+			}
 		}
 	}
-	return m
 }
 
 func execCmds(t *testing.T, cmd tea.Cmd) []tea.Msg {

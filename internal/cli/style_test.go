@@ -64,7 +64,7 @@ func ansiCodes(s string) string {
 }
 
 func TestToolHeaderIsBoldAndPreviewIsDim(t *testing.T) {
-	m := newChat(nil, nil)
+	m := newChat(nil)
 	m.resize(80, 24)
 	head := m.renderBlock(block{kind: kindTool, text: "• Ran ls"})
 	preview := m.renderBlock(block{kind: kindTool, text: "└ out"})
