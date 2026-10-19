@@ -1,4 +1,4 @@
-.PHONY: build test run fmt lint e2e
+.PHONY: build test run fmt lint tidy e2e
 
 build:
 	go build -o pigo .
@@ -19,3 +19,7 @@ fmt:
 
 lint:
 	golangci-lint run ./...
+
+# Fail when go.mod or go.sum would change. Does not rewrite them.
+tidy:
+	go mod tidy -diff
