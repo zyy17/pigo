@@ -14,6 +14,8 @@ import (
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+
+	"github.com/zyy17/pigo/internal/linebuf"
 )
 
 // DefaultModel is the built-in model name. The CLI help text uses this
@@ -203,7 +205,7 @@ func readDotEnv(path string) (map[string]string, error) {
 
 	out := map[string]string{}
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
 	for sc.Scan() {
 		key, val, ok := parseEnvLine(sc.Text())
 		if ok {

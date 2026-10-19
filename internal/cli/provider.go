@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,7 +14,7 @@ func checkProvider(cfg config.Config) error {
 	switch cfg.Provider {
 	case providerOpenAI:
 		if strings.TrimSpace(cfg.APIKey) == "" {
-			return fmt.Errorf("OPENAI_API_KEY is not set (export it, add it to .env, or set api_key in pigo.yaml)")
+			return errors.New("OPENAI_API_KEY is not set (export it, add it to .env, or set api_key in pigo.yaml)")
 		}
 		return nil
 	default:

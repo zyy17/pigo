@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/zyy17/pigo/internal/coding"
@@ -15,7 +15,7 @@ func commandText(session *coding.Session, line string) (string, error) {
 		return line, nil
 	}
 	if name == "" {
-		return "", fmt.Errorf("usage: /skill:name [request]")
+		return "", errors.New("usage: /skill:name [request]")
 	}
 	return session.PrepareSkill(name, request)
 }

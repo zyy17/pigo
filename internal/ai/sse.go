@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/zyy17/pigo/internal/linebuf"
 )
 
 // parseSSE reads a chat-completions event stream and sends ai events.
@@ -13,7 +15,7 @@ import (
 func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 	acc := &accumulator{}
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, sseBufStart), sseBufMax)
+	sc.Buffer(make([]byte, 0, linebuf.Start), linebuf.Max)
 	for sc.Scan() {
 		if err := ctx.Err(); err != nil {
 			sendStreamError(out, err, acc.message())
@@ -42,11 +44,6 @@ func parseSSE(ctx context.Context, r io.Reader, out chan<- Event) {
 	}
 	sendStreamError(out, errors.New("stream ended before the model finished"), acc.message())
 }
-
-const (
-	sseBufStart = 64 * 1024
-	sseBufMax   = 1024 * 1024
-)
 
 func dataField(line string) (string, bool) {
 	line = strings.TrimSpace(line)
