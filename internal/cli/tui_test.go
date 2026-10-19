@@ -58,10 +58,13 @@ func TestChatLayout(t *testing.T) {
 	}
 	assertWidth(t, got, 80)
 	opened := ansi.Strip(got)
-	for _, want := range []string{"test-model", "enter send", "esc to interrupt", "/exit", askPlaceholder, ">"} {
+	for _, want := range []string{"test-model", "enter send", "/exit", askPlaceholder, ">"} {
 		if !strings.Contains(opened, want) {
 			t.Fatalf("layout missing %q:\n%s", want, opened)
 		}
+	}
+	if strings.Contains(opened, "esc to interrupt") {
+		t.Fatalf("idle frame still offers interrupt:\n%s", opened)
 	}
 	for _, want := range []string{"pigo", "0.1.0", "██████"} {
 		if !strings.Contains(opened, want) {
@@ -96,10 +99,17 @@ func TestFooterFitsNarrowAndWide(t *testing.T) {
 	if ansi.StringWidth(short) > 80 {
 		t.Fatalf("short footer is %d cols: %s", ansi.StringWidth(short), short)
 	}
-	for _, want := range []string{"glm-5.3", "esc to interrupt", "/exit"} {
+	for _, want := range []string{"glm-5.3", "/exit"} {
 		if !strings.Contains(short, want) {
 			t.Fatalf("short footer missing %q: %s", want, short)
 		}
+	}
+	if strings.Contains(short, "esc to interrupt") {
+		t.Fatalf("idle footer offers interrupt: %s", short)
+	}
+	busy := ansi.Strip(styleFooter("working", "glm-5.3", "/tmp/pigo-live", 120))
+	if !strings.Contains(busy, "esc to interrupt") {
+		t.Fatalf("working footer missing interrupt: %s", busy)
 	}
 
 	long := ansi.Strip(styleFooter("working", strings.Repeat("m", 40), strings.Repeat("x", 80), 80))
