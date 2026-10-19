@@ -132,8 +132,12 @@ func TestSessionReportsModelAndSkills(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.Model() != "test-model" || session.Root() != dir {
-		t.Fatalf("model %s root %s", session.Model(), session.Root())
+	wantRoot, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Model() != "test-model" || session.Root() != wantRoot {
+		t.Fatalf("model %s root %s, want root %s", session.Model(), session.Root(), wantRoot)
 	}
 	found := session.Skills()
 	if len(found) != 1 || found[0].Name != "greet" {
