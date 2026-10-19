@@ -54,6 +54,18 @@ func TestPasteWhileBusyInserts(t *testing.T) {
 	}
 }
 
+func TestPasteReplacesCarriageReturnAndTab(t *testing.T) {
+	m := testChat(t)
+	m.resize(80, 24)
+	m.busy = true
+
+	next, _ := m.Update(tea.PasteMsg{Content: "first\rsecond\r\nthird\thello"})
+	m = next.(chatModel)
+	if m.comp.text() != "first\nsecond\nthird    hello" || !m.busy {
+		t.Fatalf("paste %q busy %v", m.comp.text(), m.busy)
+	}
+}
+
 func TestEscWhileBusyAborts(t *testing.T) {
 	started := make(chan struct{})
 	session := blockingSession(t, started)
