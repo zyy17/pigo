@@ -64,6 +64,39 @@ Reuse Pi coding-agent system prompt sections where we already do. Do not invent 
 - Self-test before push: `go test ./...`, `golangci-lint run ./...`, and a quick sanity check of the surface you touched.
 - Do not commit secrets, `.env`, or API keys.
 
+## Review lessons
+
+Recurring defect classes from PRs #16, #17, #22, #24, #30–#34, and multi-round reviews. When changing session handling, streaming, or tool execution, check against these patterns first.
+
+**Memory vs. disk consistency after write failure:** When a session write fails, memory and disk can diverge. Messages that stayed in memory but didn't reach disk cause indexing misalignment in later operations. **Do:** roll back in-memory state when persistence fails, or keep a placeholder so indexes stay aligned (#30). **Don't:** trust memory state to match disk after a failed write.
+
+**Repair torn or corrupt records on disk before appending:** If the last line on disk lacks a newline or is truncated mid-JSON, the next append will produce an unreadable file. **Do:** scan and repair the tail before writing new lines (`repairTail` in #31). **Don't:** skip torn records only in memory; disk stays corrupt.
+
+**Distinguish "corrupt" from "missing" when selecting or resuming:** A file that exists but can't be parsed is different from one that doesn't exist. **Do:** selection logic (by timestamp or id) should reject corrupt files and report the error, not silently fall back to an older session (#32). **Don't:** treat unreadable as absent.
+
+**Explicit tie-breaks for "latest" selection:** When two sessions have the same `mtime`, filesystem listing order is arbitrary and may vary by platform. **Do:** use a monotonic timestamp from the session header as the tie-break (#33). **Don't:** rely on directory order, mtime resolution, or map iteration order.
+
+**Validate and normalize partial streamed data at the boundary:** A stream interrupted mid-object leaves invalid JSON in memory. If sent in the next request, the backend rejects it. **Do:** sanitize tool arguments before encoding them on the wire; store `{}` in the journal when the live value isn't valid JSON (#34). **Don't:** trust that every assistant message will be fully formed.
+
+**Keep tool call/result pairs and cut points aligned:** Compaction and resumption send a window of messages. If a cut point lands between a tool call and its result, execution breaks. **Do:** when `firstKeptEntryId` points to a tool result, include its generating assistant message (#30). When skipping a tool, close it the same way on every path (#16 era, early round 2). **Don't:** orphan one half of the pair.
+
+**Roll back derived state with failed side effects:** If a compaction summary is saved but the updated `firstKeptEntryId` wasn't written, resume will send both the summary and the full kept window. **Do:** refuse compaction and discard the summary when the metadata write fails (#30). **Don't:** commit the compaction if any step didn't finish.
+
+**Command denylist must match real shell semantics:** Preflight checks that assume fixed argument order or miss shell composition (pipes, background, multiple commands) can be bypassed. **Do:** parse with the same rules the shell uses: options anywhere, `--` as the operand boundary, check every segment after `|` and `&` (#16, #22). **Don't:** check only the first token or assume the order you saw in one example.
+
+**Declare and invoke the same runtime:** If docs and prompts say "bash" but the code runs `sh`, different syntax is allowed and different builtins are available. **Do:** match the declared shell to the one actually invoked (`bash -c`, not `sh -c`) (#22). **Don't:** let the default `/bin/sh` vary by platform (dash on Ubuntu, bash on macOS).
+
+**Required test categories for every fix:**
+
+- **Regression test:** reproduces the exact finding; must fail before the fix, pass after. Name or comment it with the issue or PR number.
+- **Fault injection:** failing writer, truncated file, corrupt middle record, read-only directory, dropped stream at every chunk boundary.
+- **Restart/resume:** write → kill or abandon → reload → continue, then assert both memory and disk state.
+- **Tie and ordering:** equal timestamps, same-tick creation, reversed listing order.
+- **Cross-feature:** write failure → compact → resume, cancel → retry, skip → later operation in the same process.
+- **Scripted fake backend:** deterministic stub; no real model calls, API keys, or network in `make test`.
+
+If a defect needed a failure to trigger but then persisted or spread, it's P1. Add the test category that would have caught it on day one.
+
 ## Out of scope (unless the user explicitly expands)
 
 Full Pi TUI feature set, native per-vendor APIs, skills marketplace, session branching, the session picker, compaction, sub-agents, plan mode, telemetry, permission sandbox, ignore-file skill discovery.
