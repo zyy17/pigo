@@ -6,7 +6,7 @@ Rules for humans and coding agents working on pigo. Prefer this file over histor
 
 pigo is a **teaching-oriented**, minimal Go clone of [Pi](https://github.com/earendil-works/pi). The goal is to make Pi's core ideas readable in a small codebase: OpenAI-compatible transport, agent loop, coding tools, skills, and a calm terminal chat.
 
-It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Prefer deleting or refusing scope over growing toward a marketplace, multi-vendor SDKs, session store, sub-agents, or telemetry.
+It is not a full Pi port. Keep the tree small and aligned with Pi's layers. Prefer deleting or refusing scope over growing toward a marketplace, multi-vendor SDKs, sub-agents, or telemetry.
 
 ## Layering (non-negotiable)
 
@@ -99,7 +99,7 @@ If a defect needed a failure to trigger but then persisted or spread, it's P1. A
 
 ## Out of scope (unless the user explicitly expands)
 
-Full Pi TUI feature set, native per-vendor APIs, skills marketplace, session branching, the session picker, compaction, sub-agents, plan mode, telemetry, permission sandbox, ignore-file skill discovery.
+Full Pi TUI feature set, native per-vendor APIs, skills marketplace, session branching, the session picker, sub-agents, plan mode, telemetry, permission sandbox, ignore-file skill discovery.
 
 ## When unsure
 
